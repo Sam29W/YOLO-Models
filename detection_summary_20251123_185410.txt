@@ -1,0 +1,10 @@
+YOLO Object Detection Summary
+========================================
+
+Detection Time: 2025-11-23 18:54:10
+Total Objects: 5
+
+Object Breakdown:
+----------------------------------------
+  bus: 1
+  person: 4
