@@ -65,4 +65,7 @@ This was a fun weekend project! Object detection is way cooler than I expected. 
 
 ---
 
-Built with curiosity and a lot of Stack Overflow searches 😄
+Built with curiosity and a lot of Stack Overflow searches :)
+
+I'll be adding more enchancements everyday 
+plz do check it out
