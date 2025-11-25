@@ -1,91 +1,101 @@
 from ultralytics import YOLO
 from datetime import datetime
+import os
 
 model = YOLO("yolo11n.pt")
 
-print("🎯 YOLO Object Detection with Statistics Dashboard")
+print("📸 YOLO Batch Image Processor")
 print("=" * 60)
 
-# original detection
-source = "https://ultralytics.com/images/bus.jpg"  # Change to your image
-results = model.predict(source=source, conf=0.5, save=True)
+# NEW FEATURE: Process multiple images at once
+image_urls = [
+    "https://ultralytics.com/images/bus.jpg",
+    "https://hips.hearstapps.com/ghk.h-cdn.co/assets/17/30/dachshund.jpg",
+    "https://images.unsplash.com/photo-1543466835-00a7907e9de1"
+]
 
-# NEW ENHANCEMENT: Statistics Dashboard
-for r in results:
-    total_objects = len(r.boxes)
-    print(f"\n✅ Total objects detected: {total_objects}")
+# You can also use local images
+# image_files = ["image1.jpg", "image2.jpg", "image3.jpg"]
 
-    if total_objects == 0:
-        print("No objects detected!")
-        continue
+print(f"\n🔄 Processing {len(image_urls)} images...")
+print("-" * 60)
 
-    # Count each type
-    object_counts = {}
-    confidence_scores = {}
+# Store all results
+all_results = []
+total_objects_found = 0
 
-    for box in r.boxes:
-        class_id = int(box.cls[0])
-        class_name = r.names[class_id]
-        confidence = float(box.conf[0])
+for i, source in enumerate(image_urls, 1):
+    print(f"\n[{i}/{len(image_urls)}] Processing image...")
 
-        # Count objects
-        object_counts[class_name] = object_counts.get(class_name, 0) + 1
+    # Detect objects
+    results = model.predict(source=source, conf=0.5, save=True)
 
-        # Track confidence scores
-        if class_name not in confidence_scores:
-            confidence_scores[class_name] = []
-        confidence_scores[class_name].append(confidence)
+    for r in results:
+        num_objects = len(r.boxes)
+        total_objects_found += num_objects
 
-    # to display Statistics Dashboard
-    print("\n" + "=" * 60)
-    print("📊 DETECTION STATISTICS DASHBOARD")
-    print("=" * 60)
+        # Count object types
+        object_types = {}
+        for box in r.boxes:
+            class_id = int(box.cls[0])
+            class_name = r.names[class_id]
+            object_types[class_name] = object_types.get(class_name, 0) + 1
 
-    print("\n📋 Object Distribution:")
-    print("-" * 60)
-    for obj_name, count in sorted(object_counts.items(), key=lambda x: x[1], reverse=True):
-        percentage = (count / total_objects) * 100
-        avg_confidence = sum(confidence_scores[obj_name]) / len(confidence_scores[obj_name])
+        print(f"  ✅ Found {num_objects} objects")
+        print(f"  📋 Objects: {', '.join([f'{count} {name}' for name, count in object_types.items()])}")
 
-        # it creates a simple bar chart
-        bar = "█" * int(percentage / 5)
+        # Store results
+        all_results.append({
+            "image_number": i,
+            "total_objects": num_objects,
+            "object_breakdown": object_types
+        })
 
-        print(f"{obj_name:15} | {count:2} ({percentage:5.1f}%) {bar}")
-        print(f"{'':15} | Avg Confidence: {avg_confidence:.1%}")
-        print()
+# Summary Report
+print("\n" + "=" * 60)
+print("📊 BATCH PROCESSING SUMMARY")
+print("=" * 60)
 
-    # Overall statistics
-    print("-" * 60)
-    all_confidences = [c for scores in confidence_scores.values() for c in scores]
-    avg_overall = sum(all_confidences) / len(all_confidences)
-    max_conf = max(all_confidences)
-    min_conf = min(all_confidences)
+print(f"\n✅ Processed: {len(image_urls)} images")
+print(f"🎯 Total objects detected: {total_objects_found}")
+print(f"📈 Average objects per image: {total_objects_found / len(image_urls):.1f}")
 
-    print(f"\n📈 Overall Statistics:")
-    print(f"  • Average Confidence: {avg_overall:.1%}")
-    print(f"  • Highest Confidence: {max_conf:.1%}")
-    print(f"  • Lowest Confidence: {min_conf:.1%}")
-    print(f"  • Most Common Object: {max(object_counts, key=object_counts.get)}")
+# Collect all unique object types
+all_object_types = {}
+for result in all_results:
+    for obj_name, count in result["object_breakdown"].items():
+        all_object_types[obj_name] = all_object_types.get(obj_name, 0) + count
 
-    # Save statistics to file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"detection_stats_{timestamp}.txt"
+print(f"\n📋 Object Types Detected Across All Images:")
+print("-" * 60)
+for obj_name, count in sorted(all_object_types.items(), key=lambda x: x[1], reverse=True):
+    bar = "█" * (count * 2)
+    print(f"{obj_name:15} | {count:2} {bar}")
 
-    with open(filename, 'w') as f:
-        f.write("YOLO DETECTION STATISTICS\n")
-        f.write("=" * 50 + "\n\n")
-        f.write(f"Detection Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Total Objects: {total_objects}\n\n")
-        f.write("Object Distribution:\n")
-        f.write("-" * 50 + "\n")
-        for obj_name, count in sorted(object_counts.items()):
-            percentage = (count / total_objects) * 100
-            avg_conf = sum(confidence_scores[obj_name]) / len(confidence_scores[obj_name])
-            f.write(f"{obj_name}: {count} ({percentage:.1f}%) - Avg Confidence: {avg_conf:.1%}\n")
-        f.write("\n" + "-" * 50 + "\n")
-        f.write(f"Average Overall Confidence: {avg_overall:.1%}\n")
+# Save detailed report
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+report_file = f"batch_report_{timestamp}.txt"
 
-    print(f"\n💾 Statistics saved to: {filename}")
-    print("=" * 60)
+with open(report_file, 'w') as f:
+    f.write("BATCH IMAGE PROCESSING REPORT\n")
+    f.write("=" * 50 + "\n\n")
+    f.write(f"Processing Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"Images Processed: {len(image_urls)}\n")
+    f.write(f"Total Objects: {total_objects_found}\n\n")
 
-print("\n✅ Detection complete with statistics!")
+    f.write("Individual Image Results:\n")
+    f.write("-" * 50 + "\n")
+    for result in all_results:
+        f.write(f"\nImage #{result['image_number']}:\n")
+        f.write(f"  Objects: {result['total_objects']}\n")
+        f.write(f"  Breakdown: {result['object_breakdown']}\n")
+
+    f.write("\n" + "-" * 50 + "\n")
+    f.write("\nOverall Object Distribution:\n")
+    for obj_name, count in sorted(all_object_types.items()):
+        f.write(f"  {obj_name}: {count}\n")
+
+print(f"\n💾 Detailed report saved to: {report_file}")
+print(f"📁 Detected images saved in: runs/detect/predict/")
+print("\n" + "=" * 60)
+print("✅ Batch processing complete!")
