@@ -76,3 +76,10 @@ plz do check it out
 - Displays confidence scores and percentages
 - Saves detailed statistics to file
 
+- # Update - Nov 25 
+- Batch Image Processing: Process multiple images at once
+- Generates comprehensive summary reports
+- Saves all detected images automatically
+- Visual statistics for object distribution
+
+
