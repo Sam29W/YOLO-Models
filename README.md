@@ -69,3 +69,10 @@ Built with curiosity and a lot of Stack Overflow searches :)
 
 I'll be adding more enchancements everyday 
 plz do check it out
+
+#update - NOV 24
+
+- Detection Statistics Dashboard: Shows object distribution with visual bars
+- Displays confidence scores and percentages
+- Saves detailed statistics to file
+
