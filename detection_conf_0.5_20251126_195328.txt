@@ -1,0 +1,20 @@
+YOLO DETECTION REPORT
+==================================================
+
+Confidence Threshold: 50.0%
+Detection Time: 2025-11-26 19:53:28
+Total Objects: 5
+
+Objects Detected:
+--------------------------------------------------
+  • bus (94.0%)
+  • person (88.8%)
+  • person (87.8%)
+  • person (85.6%)
+  • person (62.2%)
+
+--------------------------------------------------
+
+Average Confidence: 83.7%
+Highest Confidence: 94.0%
+Lowest Confidence: 62.2%

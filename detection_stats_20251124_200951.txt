@@ -1,0 +1,13 @@
+YOLO DETECTION STATISTICS
+==================================================
+
+Detection Time: 2025-11-24 20:09:51
+Total Objects: 5
+
+Object Distribution:
+--------------------------------------------------
+bus: 1 (20.0%) - Avg Confidence: 94.0%
+person: 4 (80.0%) - Avg Confidence: 81.1%
+
+--------------------------------------------------
+Average Overall Confidence: 83.7%
