@@ -1,0 +1,5 @@
+runs/
+*.avi
+*.mp4
+detection_*.txt
+batch_*.txt
