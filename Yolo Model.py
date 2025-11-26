@@ -12,31 +12,30 @@ print("1. Basic Image Detection")
 print("2. Smart Object Counter")
 print("3. Statistics Dashboard")
 print("4. Batch Image Processing")
-print("5. Confidence Control (NEW!)")
+print("5. Confidence Control")
 print("-" * 60)
 
 mode = input("\nSelect mode (1-5): ") or "1"
 
-# ==================== MODE 1: BASIC IMAGE DETECTION ====================
+#MODE 1: BASIC IMAGE DETECTION
 if mode == "1":
     print("\n📸 Basic Image Detection")
     print("=" * 60)
 
-    source = "https://ultralytics.com/images/bus.jpg"
+    source = input("Enter image path: ")
     results = model.predict(source=source, save=True)
 
     for r in results:
         print(f"\n✅ Detected {len(r.boxes)} objects")
-        r.show()
 
     print("\n✅ Detection complete!")
 
-# ==================== MODE 2: SMART OBJECT COUNTER ====================
+#MODE 2: SMART OBJECT COUNTER
 elif mode == "2":
     print("\n🔢 Smart Object Counter")
     print("=" * 60)
 
-    source = "https://ultralytics.com/images/bus.jpg"
+    source = input("Enter image path: ")
     results = model.predict(source=source, conf=0.5, save=True)
 
     for r in results:
@@ -83,12 +82,12 @@ elif mode == "2":
 
     print("\n✅ Detection complete!")
 
-# ==================== MODE 3: STATISTICS DASHBOARD ====================
+#MODE 3: STATISTICS DASHBOARD
 elif mode == "3":
     print("\n📊 Statistics Dashboard")
     print("=" * 60)
 
-    source = "https://ultralytics.com/images/bus.jpg"
+    source = input("Enter image path: ")
     results = model.predict(source=source, conf=0.5, save=True)
 
     for r in results:
@@ -170,98 +169,106 @@ elif mode == "3":
 
     print("\n✅ Detection complete with statistics!")
 
-# ==================== MODE 4: BATCH IMAGE PROCESSING ====================
+#MODE 4: BATCH IMAGE PROCESSING
 elif mode == "4":
     print("\n📸 Batch Image Processor")
     print("=" * 60)
 
-    image_urls = [
-        "https://ultralytics.com/images/bus.jpg",
-        "https://hips.hearstapps.com/ghk.h-cdn.co/assets/17/30/dachshund.jpg",
-        "https://images.unsplash.com/photo-1543466835-00a7907e9de1"
-    ]
+    print("\nEnter image paths (one per line, press Enter twice when done):")
+    image_paths = []
+    while True:
+        path = input()
+        if path == "":
+            break
+        image_paths.append(path)
 
-    print(f"\n🔄 Processing {len(image_urls)} images...")
-    print("-" * 60)
+    if not image_paths:
+        print("❌ No images provided!")
+    else:
+        print(f"\n🔄 Processing {len(image_paths)} images...")
+        print("-" * 60)
 
-    all_results = []
-    total_objects_found = 0
+        all_results = []
+        total_objects_found = 0
 
-    for i, source in enumerate(image_urls, 1):
-        print(f"\n[{i}/{len(image_urls)}] Processing image...")
+        for i, source in enumerate(image_paths, 1):
+            print(f"\n[{i}/{len(image_paths)}] Processing image...")
 
-        results = model.predict(source=source, conf=0.5, save=True)
+            results = model.predict(source=source, conf=0.5, save=True)
 
-        for r in results:
-            num_objects = len(r.boxes)
-            total_objects_found += num_objects
+            for r in results:
+                num_objects = len(r.boxes)
+                total_objects_found += num_objects
 
-            object_types = {}
-            for box in r.boxes:
-                class_id = int(box.cls[0])
-                class_name = r.names[class_id]
-                object_types[class_name] = object_types.get(class_name, 0) + 1
+                object_types = {}
+                for box in r.boxes:
+                    class_id = int(box.cls[0])
+                    class_name = r.names[class_id]
+                    object_types[class_name] = object_types.get(class_name, 0) + 1
 
-            print(f"  ✅ Found {num_objects} objects")
-            print(f"  📋 Objects: {', '.join([f'{count} {name}' for name, count in object_types.items()])}")
+                print(f"  ✅ Found {num_objects} objects")
+                if object_types:
+                    print(f"  📋 Objects: {', '.join([f'{count} {name}' for name, count in object_types.items()])}")
 
-            all_results.append({
-                "image_number": i,
-                "total_objects": num_objects,
-                "object_breakdown": object_types
-            })
+                all_results.append({
+                    "image_number": i,
+                    "total_objects": num_objects,
+                    "object_breakdown": object_types
+                })
 
-    # Summary Report
-    print("\n" + "=" * 60)
-    print("📊 BATCH PROCESSING SUMMARY")
-    print("=" * 60)
+        # Summary Report
+        print("\n" + "=" * 60)
+        print("📊 BATCH PROCESSING SUMMARY")
+        print("=" * 60)
 
-    print(f"\n✅ Processed: {len(image_urls)} images")
-    print(f"🎯 Total objects detected: {total_objects_found}")
-    print(f"📈 Average objects per image: {total_objects_found / len(image_urls):.1f}")
+        print(f"\n✅ Processed: {len(image_paths)} images")
+        print(f"🎯 Total objects detected: {total_objects_found}")
+        print(f"📈 Average objects per image: {total_objects_found / len(image_paths):.1f}")
 
-    all_object_types = {}
-    for result in all_results:
-        for obj_name, count in result["object_breakdown"].items():
-            all_object_types[obj_name] = all_object_types.get(obj_name, 0) + count
-
-    print(f"\n📋 Object Types Detected Across All Images:")
-    print("-" * 60)
-    for obj_name, count in sorted(all_object_types.items(), key=lambda x: x[1], reverse=True):
-        bar = "█" * (count * 2)
-        print(f"{obj_name:15} | {count:2} {bar}")
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_file = f"batch_report_{timestamp}.txt"
-
-    with open(report_file, 'w') as f:
-        f.write("BATCH IMAGE PROCESSING REPORT\n")
-        f.write("=" * 50 + "\n\n")
-        f.write(f"Processing Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Images Processed: {len(image_urls)}\n")
-        f.write(f"Total Objects: {total_objects_found}\n\n")
-
-        f.write("Individual Image Results:\n")
-        f.write("-" * 50 + "\n")
+        all_object_types = {}
         for result in all_results:
-            f.write(f"\nImage #{result['image_number']}:\n")
-            f.write(f"  Objects: {result['total_objects']}\n")
-            f.write(f"  Breakdown: {result['object_breakdown']}\n")
+            for obj_name, count in result["object_breakdown"].items():
+                all_object_types[obj_name] = all_object_types.get(obj_name, 0) + count
 
-        f.write("\n" + "-" * 50 + "\n")
-        f.write("\nOverall Object Distribution:\n")
-        for obj_name, count in sorted(all_object_types.items()):
-            f.write(f"  {obj_name}: {count}\n")
+        if all_object_types:
+            print(f"\n📋 Object Types Detected Across All Images:")
+            print("-" * 60)
+            for obj_name, count in sorted(all_object_types.items(), key=lambda x: x[1], reverse=True):
+                bar = "█" * (count * 2)
+                print(f"{obj_name:15} | {count:2} {bar}")
 
-    print(f"\n💾 Detailed report saved to: {report_file}")
-    print(f"📁 Detected images saved in: runs/detect/predict/")
-    print("\n" + "=" * 60)
-    print("✅ Batch processing complete!")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_file = f"batch_report_{timestamp}.txt"
 
-# ==================== MODE 5: CONFIDENCE CONTROL (NEW!) ====================
+        with open(report_file, 'w') as f:
+            f.write("BATCH IMAGE PROCESSING REPORT\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Processing Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Images Processed: {len(image_paths)}\n")
+            f.write(f"Total Objects: {total_objects_found}\n\n")
+
+            f.write("Individual Image Results:\n")
+            f.write("-" * 50 + "\n")
+            for result in all_results:
+                f.write(f"\nImage #{result['image_number']}:\n")
+                f.write(f"  Objects: {result['total_objects']}\n")
+                f.write(f"  Breakdown: {result['object_breakdown']}\n")
+
+            f.write("\n" + "-" * 50 + "\n")
+            f.write("\nOverall Object Distribution:\n")
+            for obj_name, count in sorted(all_object_types.items()):
+                f.write(f"  {obj_name}: {count}\n")
+
+        print(f"\n💾 Detailed report saved to: {report_file}")
+        print("\n" + "=" * 60)
+        print("✅ Batch processing complete!")
+
+#MODE 5: CONFIDENCE CONTROL
 elif mode == "5":
     print("\n🎯 Confidence Control Detection")
     print("=" * 60)
+
+    source = input("Enter image path: ")
 
     print("\n📊 Choose your confidence threshold:")
     print("  • 0.3 = Low (detects more, less accurate)")
@@ -273,7 +280,6 @@ elif mode == "5":
     print(f"\n✅ Using {confidence_level:.0%} confidence threshold")
     print("-" * 60)
 
-    source = "https://ultralytics.com/images/bus.jpg"
     results = model.predict(source=source, conf=confidence_level, save=True)
 
     for r in results:
