@@ -82,4 +82,16 @@ plz do check it out
 - Saves all detected images automatically
 - Visual statistics for object distribution
 
+ YOLO OBJECT DETECTION SYSTEM
+
+Choose Detection Mode:
+1. Basic Image Detection
+2. Smart Object Counter
+3. Statistics Dashboard
+4. Batch Image Processing
+5. Confidence Control (NEW!)
+
+Select mode (1-5):
+
+
 
