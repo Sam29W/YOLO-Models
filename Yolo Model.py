@@ -1,53 +1,461 @@
 from ultralytics import YOLO
 from datetime import datetime
+import os
+from PIL import Image  # NEW: For image info
 
 model = YOLO("yolo11n.pt")
 
-print("🎯 Smart Object Detection with Category Counter\n")
 print("=" * 60)
+print("🎯 YOLO OBJECT DETECTION SYSTEM")
+print("=" * 60)
+print("\nChoose Detection Mode:")
+print("1. Basic Image Detection")
+print("2. Smart Object Counter")
+print("3. Statistics Dashboard")
+print("4. Batch Image Processing")
+print("5. Confidence Control")
+print("6. Image Info Display (NEW!)")
+print("-" * 60)
 
-# original model
-source = "https://ultralytics.com/images/bus.jpg"  #add any image of your choice
-results = model.predict(source=source, save=True)
+mode = input("\nSelect mode (1-6): ") or "1"
 
-# addition to the existing model
-for r in results:
-    total_objects = len(r.boxes)
-    print(f"\n✅ Total objects detected: {total_objects}")
+# ==================== MODE 1: BASIC IMAGE DETECTION ====================
+if mode == "1":
+    print("\n📸 Basic Image Detection")
+    print("=" * 60)
 
-    #Counts each type of object
-    object_counts = {}
-    for box in r.boxes:
-        class_id = int(box.cls[0])
-        class_name = r.names[class_id]
-        confidence = float(box.conf[0])
+    source = input("Enter image path: ")
+    results = model.predict(source=source, save=True)
 
-        # counts only if confidence > 50%
-        if confidence > 0.5:
+    for r in results:
+        print(f"\n✅ Detected {len(r.boxes)} objects")
+
+    print("\n✅ Detection complete!")
+
+# ==================== MODE 2: SMART OBJECT COUNTER ====================
+elif mode == "2":
+    print("\n🔢 Smart Object Counter")
+    print("=" * 60)
+
+    source = input("Enter image path: ")
+    results = model.predict(source=source, conf=0.5, save=True)
+
+    for r in results:
+        total_objects = len(r.boxes)
+        print(f"\n✅ Total objects detected: {total_objects}")
+
+        if total_objects == 0:
+            print("No objects detected!")
+            continue
+
+        # Count each type of object
+        object_counts = {}
+        for box in r.boxes:
+            class_id = int(box.cls[0])
+            class_name = r.names[class_id]
+            confidence = float(box.conf[0])
+
+            # Only count if confidence > 50%
+            if confidence > 0.5:
+                object_counts[class_name] = object_counts.get(class_name, 0) + 1
+
+        # Display the breakdown
+        print("\n📋 Object Breakdown:")
+        print("-" * 30)
+        for obj_name, count in sorted(object_counts.items()):
+            print(f"  {obj_name}: {count}")
+        print("-" * 30)
+
+        # Save results to text file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"detection_summary_{timestamp}.txt"
+
+        with open(filename, 'w') as f:
+            f.write("YOLO Object Detection Summary\n")
+            f.write("=" * 40 + "\n\n")
+            f.write(f"Detection Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Objects: {total_objects}\n\n")
+            f.write("Object Breakdown:\n")
+            f.write("-" * 40 + "\n")
+            for obj_name, count in sorted(object_counts.items()):
+                f.write(f"  {obj_name}: {count}\n")
+
+        print(f"\n💾 Results saved to: {filename}")
+
+    print("\n✅ Detection complete!")
+
+# ==================== MODE 3: STATISTICS DASHBOARD ====================
+elif mode == "3":
+    print("\n📊 Statistics Dashboard")
+    print("=" * 60)
+
+    source = input("Enter image path: ")
+    results = model.predict(source=source, conf=0.5, save=True)
+
+    for r in results:
+        total_objects = len(r.boxes)
+        print(f"\n✅ Total objects detected: {total_objects}")
+
+        if total_objects == 0:
+            print("No objects detected!")
+            continue
+
+        # Count each type
+        object_counts = {}
+        confidence_scores = {}
+
+        for box in r.boxes:
+            class_id = int(box.cls[0])
+            class_name = r.names[class_id]
+            confidence = float(box.conf[0])
+
+            # Count objects
             object_counts[class_name] = object_counts.get(class_name, 0) + 1
 
-    #Displays the breakdown
-    print("\n📋 Object Breakdown:")
-    print("-" * 30)
-    for obj_name, count in sorted(object_counts.items()):
-        print(f"  {obj_name}: {count}")
-    print("-" * 30)
+            # Track confidence scores
+            if class_name not in confidence_scores:
+                confidence_scores[class_name] = []
+            confidence_scores[class_name].append(confidence)
 
-    #Saves results to text file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"detection_summary_{timestamp}.txt"
+        # Display Statistics Dashboard
+        print("\n" + "=" * 60)
+        print("📊 DETECTION STATISTICS DASHBOARD")
+        print("=" * 60)
 
-    with open(filename, 'w') as f:
-        f.write("YOLO Object Detection Summary\n")
-        f.write("=" * 40 + "\n\n")
-        f.write(f"Detection Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Total Objects: {total_objects}\n\n")
-        f.write("Object Breakdown:\n")
-        f.write("-" * 40 + "\n")
-        for obj_name, count in sorted(object_counts.items()):
-            f.write(f"  {obj_name}: {count}\n")
+        print("\n📋 Object Distribution:")
+        print("-" * 60)
+        for obj_name, count in sorted(object_counts.items(), key=lambda x: x[1], reverse=True):
+            percentage = (count / total_objects) * 100
+            avg_confidence = sum(confidence_scores[obj_name]) / len(confidence_scores[obj_name])
 
-    print(f"\n💾 Results saved to: {filename}")
+            # Create a simple bar chart
+            bar = "█" * int(percentage / 5)
+
+            print(f"{obj_name:15} | {count:2} ({percentage:5.1f}%) {bar}")
+            print(f"{'':15} | Avg Confidence: {avg_confidence:.1%}")
+            print()
+
+        # Overall statistics
+        print("-" * 60)
+        all_confidences = [c for scores in confidence_scores.values() for c in scores]
+        avg_overall = sum(all_confidences) / len(all_confidences)
+        max_conf = max(all_confidences)
+        min_conf = min(all_confidences)
+
+        print(f"\n📈 Overall Statistics:")
+        print(f"  • Average Confidence: {avg_overall:.1%}")
+        print(f"  • Highest Confidence: {max_conf:.1%}")
+        print(f"  • Lowest Confidence: {min_conf:.1%}")
+        print(f"  • Most Common Object: {max(object_counts, key=object_counts.get)}")
+
+        # Save statistics to file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"detection_stats_{timestamp}.txt"
+
+        with open(filename, 'w') as f:
+            f.write("YOLO DETECTION STATISTICS\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Detection Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Objects: {total_objects}\n\n")
+            f.write("Object Distribution:\n")
+            f.write("-" * 50 + "\n")
+            for obj_name, count in sorted(object_counts.items()):
+                percentage = (count / total_objects) * 100
+                avg_conf = sum(confidence_scores[obj_name]) / len(confidence_scores[obj_name])
+                f.write(f"{obj_name}: {count} ({percentage:.1f}%) - Avg Confidence: {avg_conf:.1%}\n")
+            f.write("\n" + "-" * 50 + "\n")
+            f.write(f"Average Overall Confidence: {avg_overall:.1%}\n")
+
+        print(f"\n💾 Statistics saved to: {filename}")
+        print("=" * 60)
+
+    print("\n✅ Detection complete with statistics!")
+
+# ==================== MODE 4: BATCH IMAGE PROCESSING ====================
+elif mode == "4":
+    print("\n📸 Batch Image Processor")
+    print("=" * 60)
+
+    print("\nEnter image paths (one per line, press Enter twice when done):")
+    image_paths = []
+    while True:
+        path = input()
+        if path == "":
+            break
+        image_paths.append(path)
+
+    if not image_paths:
+        print("❌ No images provided!")
+    else:
+        print(f"\n🔄 Processing {len(image_paths)} images...")
+        print("-" * 60)
+
+        all_results = []
+        total_objects_found = 0
+
+        for i, source in enumerate(image_paths, 1):
+            print(f"\n[{i}/{len(image_paths)}] Processing image...")
+
+            results = model.predict(source=source, conf=0.5, save=True)
+
+            for r in results:
+                num_objects = len(r.boxes)
+                total_objects_found += num_objects
+
+                object_types = {}
+                for box in r.boxes:
+                    class_id = int(box.cls[0])
+                    class_name = r.names[class_id]
+                    object_types[class_name] = object_types.get(class_name, 0) + 1
+
+                print(f"  ✅ Found {num_objects} objects")
+                if object_types:
+                    print(f"  📋 Objects: {', '.join([f'{count} {name}' for name, count in object_types.items()])}")
+
+                all_results.append({
+                    "image_number": i,
+                    "total_objects": num_objects,
+                    "object_breakdown": object_types
+                })
+
+        # Summary Report
+        print("\n" + "=" * 60)
+        print("📊 BATCH PROCESSING SUMMARY")
+        print("=" * 60)
+
+        print(f"\n✅ Processed: {len(image_paths)} images")
+        print(f"🎯 Total objects detected: {total_objects_found}")
+        print(f"📈 Average objects per image: {total_objects_found / len(image_paths):.1f}")
+
+        all_object_types = {}
+        for result in all_results:
+            for obj_name, count in result["object_breakdown"].items():
+                all_object_types[obj_name] = all_object_types.get(obj_name, 0) + count
+
+        if all_object_types:
+            print(f"\n📋 Object Types Detected Across All Images:")
+            print("-" * 60)
+            for obj_name, count in sorted(all_object_types.items(), key=lambda x: x[1], reverse=True):
+                bar = "█" * (count * 2)
+                print(f"{obj_name:15} | {count:2} {bar}")
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_file = f"batch_report_{timestamp}.txt"
+
+        with open(report_file, 'w') as f:
+            f.write("BATCH IMAGE PROCESSING REPORT\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Processing Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Images Processed: {len(image_paths)}\n")
+            f.write(f"Total Objects: {total_objects_found}\n\n")
+
+            f.write("Individual Image Results:\n")
+            f.write("-" * 50 + "\n")
+            for result in all_results:
+                f.write(f"\nImage #{result['image_number']}:\n")
+                f.write(f"  Objects: {result['total_objects']}\n")
+                f.write(f"  Breakdown: {result['object_breakdown']}\n")
+
+            f.write("\n" + "-" * 50 + "\n")
+            f.write("\nOverall Object Distribution:\n")
+            for obj_name, count in sorted(all_object_types.items()):
+                f.write(f"  {obj_name}: {count}\n")
+
+        print(f"\n💾 Detailed report saved to: {report_file}")
+        print("\n" + "=" * 60)
+        print("✅ Batch processing complete!")
+
+# ==================== MODE 5: CONFIDENCE CONTROL ====================
+elif mode == "5":
+    print("\n🎯 Confidence Control Detection")
+    print("=" * 60)
+
+    source = input("Enter image path: ")
+
+    print("\n📊 Choose your confidence threshold:")
+    print("  • 0.3 = Low (detects more, less accurate)")
+    print("  • 0.5 = Medium (balanced)")
+    print("  • 0.7 = High (detects less, very accurate)")
+
+    confidence_level = float(input("\nEnter confidence (0.3-0.9): ") or 0.5)
+
+    print(f"\n✅ Using {confidence_level:.0%} confidence threshold")
+    print("-" * 60)
+
+    results = model.predict(source=source, conf=confidence_level, save=True)
+
+    for r in results:
+        total_objects = len(r.boxes)
+
+        if total_objects == 0:
+            print("\n⚠️ No objects detected at this confidence level!")
+            print("💡 Try lowering the confidence threshold")
+        else:
+            print(f"\n✅ Detected {total_objects} objects")
+
+            print("\n📋 Detection Details:")
+            print("-" * 60)
+
+            object_list = []
+            for box in r.boxes:
+                class_id = int(box.cls[0])
+                class_name = r.names[class_id]
+                confidence = float(box.conf[0])
+
+                # Visual confidence bar
+                bar_length = int(confidence * 20)
+                bar = "█" * bar_length + "░" * (20 - bar_length)
+
+                print(f"{class_name:15} | {confidence:.1%} {bar}")
+                object_list.append(f"{class_name} ({confidence:.1%})")
+
+            print("-" * 60)
+
+            # Statistics
+            confidences = [float(box.conf[0]) for box in r.boxes]
+            avg_conf = sum(confidences) / len(confidences)
+            max_conf = max(confidences)
+            min_conf = min(confidences)
+
+            print(f"\n📈 Confidence Statistics:")
+            print(f"  • Average: {avg_conf:.1%}")
+            print(f"  • Highest: {max_conf:.1%}")
+            print(f"  • Lowest: {min_conf:.1%}")
+
+            # Save results
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"detection_conf_{confidence_level:.1f}_{timestamp}.txt"
+
+            with open(filename, 'w') as f:
+                f.write("YOLO DETECTION REPORT\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(f"Confidence Threshold: {confidence_level:.1%}\n")
+                f.write(f"Detection Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Total Objects: {total_objects}\n\n")
+                f.write("Objects Detected:\n")
+                f.write("-" * 50 + "\n")
+                for obj in object_list:
+                    f.write(f"  • {obj}\n")
+                f.write("\n" + "-" * 50 + "\n")
+                f.write(f"\nAverage Confidence: {avg_conf:.1%}\n")
+                f.write(f"Highest Confidence: {max_conf:.1%}\n")
+                f.write(f"Lowest Confidence: {min_conf:.1%}\n")
+
+            print(f"\n💾 Report saved to: {filename}")
+
+    print("\n" + "=" * 60)
+    print("✅ Detection complete!")
+
+# ==================== MODE 6: IMAGE INFO DISPLAY (NEW!) ====================
+elif mode == "6":
+    print("\n📏 Image Info Display with Detection")
+    print("=" * 60)
+
+    source = input("Enter image path: ")
+
+    # Display image information
+    try:
+        if os.path.exists(source):
+            # Get file size
+            file_size = os.path.getsize(source) / 1024  # KB
+
+            # Get image dimensions
+            img = Image.open(source)
+            width, height = img.size
+
+            print(f"\n📊 Image Information:")
+            print("-" * 60)
+            print(f"  📁 File: {os.path.basename(source)}")
+            print(f"  📏 Dimensions: {width} x {height} pixels")
+            print(f"  💾 File Size: {file_size:.2f} KB")
+            print(f"  🎨 Format: {img.format}")
+            print(f"  🖼️ Mode: {img.mode}")
+            print("-" * 60)
+
+            # Calculate megapixels
+            megapixels = (width * height) / 1_000_000
+            print(f"\n✨ Resolution: {megapixels:.2f} MP")
+
+            # Processing time estimate
+            if megapixels < 2:
+                speed = "Very Fast"
+            elif megapixels < 5:
+                speed = "Fast"
+            elif megapixels < 10:
+                speed = "Medium"
+            else:
+                speed = "Slow"
+            print(f"⚡ Expected Speed: {speed}")
+
+        print(f"\n🔍 Running detection...")
+        print("-" * 60)
+
+        # Run detection
+        results = model.predict(source=source, conf=0.5, save=True)
+
+        for r in results:
+            total_objects = len(r.boxes)
+
+            if total_objects == 0:
+                print("\n⚠️ No objects detected!")
+            else:
+                print(f"\n✅ Detected {total_objects} objects")
+
+                # Show each detected object
+                print("\n📋 Detected Objects:")
+                print("-" * 60)
+
+                object_summary = {}
+                for box in r.boxes:
+                    class_id = int(box.cls[0])
+                    class_name = r.names[class_id]
+                    confidence = float(box.conf[0])
+
+                    # Get bounding box size
+                    coords = box.xyxy[0].tolist()
+                    box_width = coords[2] - coords[0]
+                    box_height = coords[3] - coords[1]
+                    box_area = (box_width * box_height) / (width * height) * 100
+
+                    print(f"{class_name:15} | {confidence:.1%} | {box_area:.1f}% of image")
+
+                    object_summary[class_name] = object_summary.get(class_name, 0) + 1
+
+                print("-" * 60)
+
+                # Summary
+                print(f"\n📊 Summary:")
+                for obj_name, count in sorted(object_summary.items()):
+                    print(f"  • {obj_name}: {count}")
+
+                # Save detailed report
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"image_info_report_{timestamp}.txt"
+
+                with open(filename, 'w') as f:
+                    f.write("IMAGE DETECTION REPORT\n")
+                    f.write("=" * 50 + "\n\n")
+                    f.write("Image Information:\n")
+                    f.write(f"  File: {os.path.basename(source)}\n")
+                    f.write(f"  Dimensions: {width} x {height} pixels\n")
+                    f.write(f"  File Size: {file_size:.2f} KB\n")
+                    f.write(f"  Resolution: {megapixels:.2f} MP\n\n")
+                    f.write("Detection Results:\n")
+                    f.write(f"  Total Objects: {total_objects}\n\n")
+                    f.write("Object Breakdown:\n")
+                    for obj_name, count in sorted(object_summary.items()):
+                        f.write(f"  {obj_name}: {count}\n")
+
+                print(f"\n💾 Report saved to: {filename}")
+
+        print("\n" + "=" * 60)
+        print("✅ Detection complete!")
+
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        print("Please check the image path and try again.")
+
+else:
+    print("\n❌ Invalid mode selected!")
 
 print("\n" + "=" * 60)
-print("✅ Detection complete!")
