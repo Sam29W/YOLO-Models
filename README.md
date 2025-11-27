@@ -93,5 +93,9 @@ Choose Detection Mode:
 
 Select mode (1-5):
 
+# Update (Nov 27)
+- Image Info Display (Mode 6): Shows image dimensions, file size, resolution, and object size analysis
+
+
 
 
