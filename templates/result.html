@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Detection Results</title>
+</head>
+<body>
+  <h1>Detection Results</h1>
+
+  {% if original %}
+    <h3>Original</h3>
+    <img src="{{ url_for('static', filename='uploads/' + original) }}" width="400">
+  {% endif %}
+
+  {% if result %}
+    <h3>Detected</h3>
+    <img src="{{ url_for('static', filename='results/' + result) }}" width="400">
+  {% endif %}
+
+  <h2>Objects ({{ total }})</h2>
+  <ul>
+    {% for d in detections %}
+      <li>{{ d.class }} – {{ d.confidence }}</li>
+    {% endfor %}
+  </ul>
+
+  <a href="/">Back</a>
+</body>
+</html>
