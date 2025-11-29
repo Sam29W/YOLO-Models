@@ -1,29 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Detection Results</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detection Results - YOLO</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>Detection Results</h1>
+    <div class="container">
+        <h1>✅ Detection Results</h1>
 
-  {% if original %}
-    <h3>Original</h3>
-    <img src="{{ url_for('static', filename='uploads/' + original) }}" width="400">
-  {% endif %}
+        <!-- NEW: Detection Stats -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Objects Found:</span>
+                <span class="stat-value">{{ total }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Detection Time:</span>
+                <span class="stat-value">{{ detection_time }}s</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Confidence:</span>
+                <span class="stat-value">{{ (detections[0].confidence if detections else 'N/A') }}</span>
+            </div>
+        </div>
 
-  {% if result %}
-    <h3>Detected</h3>
-    <img src="{{ url_for('static', filename='results/' + result) }}" width="400">
-  {% endif %}
+        <div class="results">
+            <div class="image-box">
+                <h3>Original Image</h3>
+                <img src="{{ url_for('static', filename='uploads/' + original) }}" alt="Original">
+            </div>
 
-  <h2>Objects ({{ total }})</h2>
-  <ul>
-    {% for d in detections %}
-      <li>{{ d.class }} – {{ d.confidence }}</li>
-    {% endfor %}
-  </ul>
+            <div class="image-box">
+                <h3>Detected Objects</h3>
+                <img src="{{ url_for('static', filename='results/' + result) }}" alt="Result">
+                <!-- NEW: Download Button -->
+                <a href="{{ url_for('download', filename=result) }}" class="download-btn" download>
+                    📥 Download Result
+                </a>
+            </div>
+        </div>
 
-  <a href="/">Back</a>
+        <!-- NEW: Object Count Summary -->
+        <div class="detection-stats">
+            <h2>📊 Object Summary</h2>
+            <div class="object-counts">
+                {% for obj, count in object_counts.items() %}
+                <div class="count-item">
+                    <span class="obj-name">{{ obj }}</span>
+                    <span class="obj-count">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="detection-stats">
+            <h2>📋 Detailed Detections</h2>
+            <ul>
+                {% for detection in detections %}
+                <li>{{ detection.class }} - {{ detection.confidence }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <a href="/" class="back-button">🔙 Detect Another Image</a>
+    </div>
 </body>
 </html>

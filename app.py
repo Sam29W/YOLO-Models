@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, send_file
 from ultralytics import YOLO
 from PIL import Image
 import os
 from datetime import datetime
+import time
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -23,12 +24,15 @@ def home():
 @app.route('/detect', methods=['POST'])
 def detect():
     if 'file' not in request.files:
-        return redirect(url_for('home'))
+        return render_template('index.html', error="No file uploaded")
 
     file = request.files['file']
 
     if file.filename == '':
-        return redirect(url_for('home'))
+        return render_template('index.html', error="No file selected")
+
+    # Start timer
+    start_time = time.time()
 
     # Save uploaded image
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -44,15 +48,24 @@ def detect():
 
     # Process results
     detections = []
+    object_counts = {}  # NEW: Count objects by class
+
     for r in results:
         for box in r.boxes:
             class_id = int(box.cls[0])
             class_name = r.names[class_id]
             conf = float(box.conf[0])
+
             detections.append({
                 'class': class_name,
                 'confidence': f"{conf:.2%}"
             })
+
+            # NEW: Count objects
+            if class_name in object_counts:
+                object_counts[class_name] += 1
+            else:
+                object_counts[class_name] = 1
 
         # Save annotated image
         result_img = r.plot()
@@ -60,15 +73,27 @@ def detect():
         result_path = os.path.join(app.config['RESULT_FOLDER'], result_filename)
         Image.fromarray(result_img).save(result_path)
 
+    # Calculate detection time
+    detection_time = round(time.time() - start_time, 2)
+
     return render_template('result.html',
                            original=filename,
                            result=result_filename,
                            detections=detections,
-                           total=len(detections))
+                           total=len(detections),
+                           object_counts=object_counts,  # NEW
+                           detection_time=detection_time)  # NEW
 
+
+# NEW: Download route
+@app.route('/download/<filename>')
+def download(filename):
+    filepath = os.path.join(app.config['RESULT_FOLDER'], filename)
+    return send_file(filepath, as_attachment=True)
 
 
 if __name__ == '__main__':
     import os
+
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)

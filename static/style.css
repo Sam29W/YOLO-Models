@@ -23,7 +23,7 @@ body {
 h1 {
     text-align: center;
     color: #333;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
     font-size: 2.5em;
 }
 
@@ -31,6 +31,36 @@ p {
     text-align: center;
     color: #666;
     margin-bottom: 30px;
+}
+
+/* NEW: Stats Bar */
+.stats-bar {
+    display: flex;
+    justify-content: space-around;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 10px;
+}
+
+.stat-label {
+    display: block;
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.stat-value {
+    display: block;
+    color: #667eea;
+    font-size: 24px;
+    font-weight: bold;
 }
 
 .upload-box {
@@ -106,6 +136,55 @@ button:hover {
     box-shadow: 0 4px 10px rgba(0,0,0,0.2);
 }
 
+/* NEW: Download Button */
+.download-btn {
+    display: inline-block;
+    margin-top: 15px;
+    padding: 10px 20px;
+    background: #28a745;
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
+.download-btn:hover {
+    background: #218838;
+}
+
+/* NEW: Object Counts */
+.object-counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.count-item {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.obj-name {
+    font-weight: bold;
+    color: #333;
+    text-transform: capitalize;
+}
+
+.obj-count {
+    background: #667eea;
+    color: white;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+}
+
 .detection-stats {
     background: #f8f9fa;
     padding: 20px;
@@ -153,4 +232,23 @@ footer {
     margin-top: 40px;
     color: #999;
     font-size: 14px;
+}
+
+/* NEW: Mobile Responsive */
+@media (max-width: 768px) {
+    .results {
+        grid-template-columns: 1fr;
+    }
+
+    .stats-bar {
+        flex-direction: column;
+    }
+
+    .container {
+        padding: 20px;
+    }
+
+    h1 {
+        font-size: 1.8em;
+    }
 }
