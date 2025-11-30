@@ -96,6 +96,9 @@ Select mode (1-5):
 # Update (Nov 27)
 - Image Info Display (Mode 6): Shows image dimensions, file size, resolution, and object size analysis
 
+- #Update (Nov 29)
+- the UI is better now and can detect multiple objects in the image
+
 
 
 
