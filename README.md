@@ -99,6 +99,8 @@ Select mode (1-5):
 - #Update (Nov 29)
 - the UI is better now and can detect multiple objects in the image
 
+-# update 30
+ -   now you can preview your images and it shows detection time and number of objects
 
 
 
