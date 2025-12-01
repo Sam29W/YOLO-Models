@@ -10,6 +10,18 @@
     <div class="container">
         <h1>✅ Detection Results</h1>
 
+        {% if no_objects %}
+<div class="warning-box">
+    ⚠️ No objects detected! Try:
+    <ul style="text-align: left; margin-top: 10px;">
+        <li>Lowering the confidence threshold</li>
+        <li>Using a different image</li>
+        <li>Ensuring the image has clear objects</li>
+    </ul>
+</div>
+{% endif %}
+
+
         <!-- NEW: Detection Stats -->
         <div class="stats-bar">
             <div class="stat-item">

@@ -252,3 +252,69 @@ footer {
         font-size: 1.8em;
     }
 }
+/* NEW: Error Box */
+.error-box {
+    background: #ff4444;
+    color: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 20px 0;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* NEW: Loading Animation */
+#loading {
+    text-align: center;
+    margin: 30px 0;
+}
+
+.loader {
+    border: 8px solid #f3f3f3;
+    border-top: 8px solid #667eea;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+#loading p {
+    color: #667eea;
+    font-weight: bold;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* NEW: Image Preview */
+#imagePreview {
+    margin: 20px 0;
+    text-align: center;
+}
+
+#imagePreview h3 {
+    color: #333;
+    margin-bottom: 10px;
+}
+/* NEW: Warning Box */
+.warning-box {
+    background: #ffc107;
+    color: #333;
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+}
+
+.warning-box ul {
+    list-style: disc;
+    margin-left: 20px;
+}
