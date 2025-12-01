@@ -1,4 +1,7 @@
-# My First YOLO Object Detection Project (https://object-detection-model-03p2.onrender.com)
+# My First YOLO Object Detection Project 
+(https://huggingface.co/spaces/Samith29/yolo-object-detection) check out the website here
+
+(https://object-detection-model-03p2.onrender.com)
 
 Hey! This is my first attempt at building an object detection model using YOLO. It's pretty cool - it can spot everyday objects in images!
 
