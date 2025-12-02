@@ -131,10 +131,26 @@ def detect_objects_video(video, confidence, progress=gr.Progress()):
     return output_path, summary
 
 
+def detect_webcam(image, confidence):
+    """
+    Real-time webcam detection
+    """
+    if image is None:
+        return None
+
+    # Run detection
+    results = model.predict(source=image, conf=confidence, save=False, verbose=False)
+
+    # Get annotated image
+    annotated_image = results[0].plot()
+
+    return annotated_image
+
+
 # Create Gradio interface with tabs
-with gr.Blocks() as demo:
+with gr.Blocks(title="YOLO Object Detection") as demo:
     gr.Markdown("# 🎯 YOLO Object Detection")
-    gr.Markdown("### Detect objects in images or videos using YOLOv11")
+    gr.Markdown("### Detect objects in images, videos, or live from your webcam using YOLOv11")
 
     with gr.Tabs():
         # Image Detection Tab
@@ -200,9 +216,50 @@ with gr.Blocks() as demo:
                 outputs=[video_output, video_text]
             )
 
+        # NEW: Webcam Detection Tab
+        with gr.Tab("📸 Live Webcam"):
+            gr.Markdown("### 🔴 Real-Time Object Detection")
+            gr.Markdown("**Click 'Start Webcam' below and allow camera access!**")
+
+            with gr.Row():
+                with gr.Column():
+                    webcam_confidence = gr.Slider(
+                        minimum=0.1,
+                        maximum=0.95,
+                        value=0.5,
+                        step=0.05,
+                        label="Confidence Threshold",
+                        info="Adjust detection sensitivity"
+                    )
+
+                    gr.Markdown("""
+                    **Tips for best results:**
+                    - Ensure good lighting
+                    - Keep objects in center of frame
+                    - Adjust confidence for more/fewer detections
+                    - Works best with clear, unobstructed views
+                    """)
+
+            webcam_output = gr.Image(
+                sources=["webcam"],
+                streaming=True,
+                type="numpy",
+                label="🎥 Live Detection Feed"
+            )
+
+            # Real-time detection on webcam feed
+            webcam_output.stream(
+                fn=detect_webcam,
+                inputs=[webcam_output, webcam_confidence],
+                outputs=[webcam_output],
+                time_limit=60,
+                stream_every=0.1
+            )
+
     # Footer
     gr.Markdown("---")
     gr.Markdown("Built by **Samith Shivakumar** | Powered by YOLOv11 🚀")
+    gr.Markdown("⭐ **NEW:** Real-time webcam detection added!")
 
 if __name__ == "__main__":
     demo.launch()
