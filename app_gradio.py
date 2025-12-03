@@ -124,6 +124,141 @@ def detect_objects_image(image, confidence):
     return annotated_image, summary, json_file, csv_file
 
 
+# NEW FUNCTION: Image detection with filter
+def detect_objects_image_filtered(image, confidence, *filters):
+    """
+    Detect objects in an image with custom object filtering
+    """
+    if image is None:
+        return None, "⚠️ Please upload an image first!", None, None
+
+    # Define filter mapping
+    filter_classes = [
+        'person', 'car', 'truck', 'bus', 'bicycle', 'motorcycle',
+        'dog', 'cat', 'bird', 'bottle', 'cup', 'laptop', 'phone', 'chair'
+    ]
+
+    # Get selected filters
+    selected_filters = [filter_classes[i] for i, f in enumerate(filters) if f]
+
+    # Start timer
+    start_time = time.time()
+
+    # Run detection
+    results = model.predict(source=image, conf=confidence, save=False)
+
+    # Calculate processing time
+    process_time = time.time() - start_time
+
+    # Get annotated image - we'll need to redraw if filtering
+    annotated_image = results[0].plot()
+
+    # Count objects and filter
+    detections = []
+    object_counts = {}
+    export_data = []
+
+    for box in results[0].boxes:
+        class_id = int(box.cls[0])
+        class_name = results[0].names[class_id]
+        conf = float(box.conf[0])
+        bbox = box.xyxy[0].tolist()
+
+        # Apply filter (if filters selected, only show those objects)
+        if selected_filters and class_name not in selected_filters:
+            continue
+
+        detections.append(f"{class_name}: {conf:.2%}")
+
+        if class_name in object_counts:
+            object_counts[class_name] += 1
+        else:
+            object_counts[class_name] = 1
+
+        export_data.append({
+            'object': class_name,
+            'confidence': f"{conf:.4f}",
+            'bbox_x1': round(bbox[0], 2),
+            'bbox_y1': round(bbox[1], 2),
+            'bbox_x2': round(bbox[2], 2),
+            'bbox_y2': round(bbox[3], 2)
+        })
+
+    # Format results
+    total = len(detections)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    summary = f"# 📊 Detection Results\n\n"
+
+    # Show filter status
+    if selected_filters:
+        summary += f"**🎯 Filtered to:** {', '.join(selected_filters)}\n"
+    else:
+        summary += f"**🎯 Filter:** All objects\n"
+
+    summary += f"**Timestamp:** {timestamp}\n"
+    summary += f"**⏱️ Processing Time:** {process_time:.2f} seconds\n"
+    summary += f"**🚀 Speed:** {1 / process_time:.1f} FPS\n\n"
+    summary += f"## 🎯 Total Objects Found: **{total}**\n\n"
+
+    if total > 0:
+        summary += "### 📈 Live Object Counter:\n\n"
+
+        emoji_map = {
+            'person': '👤', 'car': '🚗', 'truck': '🚚', 'bus': '🚌',
+            'bicycle': '🚲', 'motorcycle': '🏍️', 'dog': '🐕', 'cat': '🐈',
+            'bird': '🐦', 'horse': '🐴', 'bottle': '🍾', 'cup': '☕',
+            'laptop': '💻', 'phone': '📱', 'book': '📚', 'chair': '🪑',
+            'traffic light': '🚦', 'stop sign': '🛑',
+        }
+
+        sorted_objects = sorted(object_counts.items(), key=lambda x: x[1], reverse=True)
+
+        for obj, count in sorted_objects:
+            emoji = emoji_map.get(obj, '📦')
+            bar = '🟦' * count
+            summary += f"**{emoji} {obj.capitalize()}:** {count} {bar}\n\n"
+
+        summary += "\n---\n\n### 📋 Detailed Detections:\n\n"
+        for i, det in enumerate(detections, 1):
+            summary += f"{i}. {det}\n"
+    else:
+        summary = "# ⚠️ No objects detected!\n\n"
+        if selected_filters:
+            summary += f"**Filter active:** Looking for {', '.join(selected_filters)}\n\n"
+        summary += "**Try:** Lowering confidence, changing filter, or using a different image"
+
+    # Create export files
+    json_file = None
+    csv_file = None
+
+    if export_data:
+        json_output = {
+            'timestamp': timestamp,
+            'applied_filters': selected_filters if selected_filters else 'all',
+            'processing_time_seconds': round(process_time, 2),
+            'fps': round(1 / process_time, 2),
+            'total_objects': total,
+            'object_summary': object_counts,
+            'detections': export_data
+        }
+
+        json_temp = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
+        json.dump(json_output, json_temp, indent=2)
+        json_temp.close()
+        json_file = json_temp.name
+
+        csv_temp = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv')
+        csv_temp.write("Object,Confidence,BBox_X1,BBox_Y1,BBox_X2,BBox_Y2\n")
+        for item in export_data:
+            csv_temp.write(
+                f"{item['object']},{item['confidence']},{item['bbox_x1']},{item['bbox_y1']},{item['bbox_x2']},{item['bbox_y2']}\n")
+        csv_temp.close()
+        csv_file = csv_temp.name
+
+    return annotated_image, summary, json_file, csv_file
+
+
 def detect_objects_video(video, confidence, progress=gr.Progress()):
     """
     Detect objects in a video with timing stats
@@ -306,12 +441,32 @@ with gr.Blocks(title="YOLO Object Detection") as demo:
     gr.Markdown("### AI-powered detection with real-time stats, data export, and performance metrics!")
 
     with gr.Tabs():
-        # Image Detection Tab
+        # Image Detection Tab WITH FILTER
         with gr.Tab("📷 Image Detection"):
             with gr.Row():
                 with gr.Column():
                     image_input = gr.Image(type="pil", label="📤 Upload Image")
                     image_confidence = gr.Slider(0.1, 0.95, 0.5, step=0.05, label="Confidence Threshold")
+
+                    # NEW: Object filter checkboxes
+                    with gr.Accordion("🎯 Filter Objects (Optional)", open=False):
+                        gr.Markdown("**Select specific objects to detect (leave all unchecked for everything):**")
+
+                        filter_person = gr.Checkbox(label="👤 Person", value=False)
+                        filter_car = gr.Checkbox(label="🚗 Car", value=False)
+                        filter_truck = gr.Checkbox(label="🚚 Truck", value=False)
+                        filter_bus = gr.Checkbox(label="🚌 Bus", value=False)
+                        filter_bicycle = gr.Checkbox(label="🚲 Bicycle", value=False)
+                        filter_motorcycle = gr.Checkbox(label="🏍️ Motorcycle", value=False)
+                        filter_dog = gr.Checkbox(label="🐕 Dog", value=False)
+                        filter_cat = gr.Checkbox(label="🐈 Cat", value=False)
+                        filter_bird = gr.Checkbox(label="🐦 Bird", value=False)
+                        filter_bottle = gr.Checkbox(label="🍾 Bottle", value=False)
+                        filter_cup = gr.Checkbox(label="☕ Cup", value=False)
+                        filter_laptop = gr.Checkbox(label="💻 Laptop", value=False)
+                        filter_phone = gr.Checkbox(label="📱 Phone", value=False)
+                        filter_chair = gr.Checkbox(label="🪑 Chair", value=False)
+
                     image_btn = gr.Button("🔍 Detect Objects", variant="primary", size="lg")
 
                     gr.Examples(
@@ -332,8 +487,14 @@ with gr.Blocks(title="YOLO Object Detection") as demo:
                         csv_download = gr.File(label="📊 Download CSV")
 
             image_btn.click(
-                fn=detect_objects_image,
-                inputs=[image_input, image_confidence],
+                fn=detect_objects_image_filtered,
+                inputs=[
+                    image_input, image_confidence,
+                    filter_person, filter_car, filter_truck, filter_bus,
+                    filter_bicycle, filter_motorcycle, filter_dog, filter_cat,
+                    filter_bird, filter_bottle, filter_cup, filter_laptop,
+                    filter_phone, filter_chair
+                ],
                 outputs=[image_output, image_text, json_download, csv_download]
             )
 
@@ -395,7 +556,7 @@ with gr.Blocks(title="YOLO Object Detection") as demo:
 
     gr.Markdown("---")
     gr.Markdown("Built by **Samith Shivakumar** | Powered by YOLOv11 🚀")
-    gr.Markdown("⭐ **Features:** Webcam + Object Counter + Data Export + **Performance Stats (FPS/Timing)**")
+    gr.Markdown("⭐ **Features:** Webcam + Counter + Data Export + FPS Stats + **Object Filter**")
 
 if __name__ == "__main__":
     demo.launch()
