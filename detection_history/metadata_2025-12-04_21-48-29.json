@@ -1,0 +1,9 @@
+{
+  "timestamp": "2025-12-04 21:48:29",
+  "object_counts": {
+    "person": 2,
+    "truck": 1
+  },
+  "total_objects": 3,
+  "image_path": "detection_history/detection_2025-12-04_21-48-29.jpg"
+}

@@ -1,0 +1,8 @@
+{
+  "timestamp": "2025-12-04 21:48:29",
+  "message": "\ud83d\ude9a Truck detected! (Count: 1)",
+  "object_counts": {
+    "person": 2,
+    "truck": 1
+  }
+}

@@ -10,6 +10,8 @@ from datetime import datetime
 import time
 import zipfile
 from pathlib import Path
+import threading
+import pygame  # For sound alerts
 
 # Load YOLO model
 model = YOLO("yolo11n.pt")
@@ -18,19 +20,26 @@ model = YOLO("yolo11n.pt")
 HISTORY_DIR = Path("detection_history")
 HISTORY_DIR.mkdir(exist_ok=True)
 
+# Create alerts directory
+ALERTS_DIR = Path("alert_logs")
+ALERTS_DIR.mkdir(exist_ok=True)
+
+# Initialize pygame for sound
+pygame.mixer.init()
+
+# Global alert log
+alert_log = []
+
 
 def draw_custom_boxes(image, results, confidence):
     """
     Draw custom colored bounding boxes on image
     """
-    # Convert PIL to numpy if needed
     if isinstance(image, Image.Image):
         image = np.array(image)
 
-    # Make a copy
     annotated = image.copy()
 
-    # Custom color map (BGR format for OpenCV)
     color_map = {
         'person': (255, 100, 100),
         'car': (100, 100, 255),
@@ -48,7 +57,6 @@ def draw_custom_boxes(image, results, confidence):
         'chair': (150, 150, 255),
     }
 
-    # Draw boxes
     for box in results[0].boxes:
         class_id = int(box.cls[0])
         class_name = results[0].names[class_id]
@@ -57,24 +65,172 @@ def draw_custom_boxes(image, results, confidence):
         if conf < confidence:
             continue
 
-        # Get coordinates
         x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
-
-        # Get color
         color = color_map.get(class_name, (255, 255, 255))
 
-        # Draw rectangle
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
 
-        # Draw label background
         label = f"{class_name}: {conf:.2f}"
         (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
         cv2.rectangle(annotated, (x1, y1 - label_h - 10), (x1 + label_w, y1), color, -1)
-
-        # Draw label text
         cv2.putText(annotated, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     return annotated
+
+
+def play_alert_sound():
+    """
+    Play alert sound (beep)
+    """
+    try:
+        # Create a simple beep sound
+        frequency = 1000  # Hz
+        duration = 500  # milliseconds
+
+        # Generate beep (simple sine wave)
+        sample_rate = 22050
+        samples = int(sample_rate * duration / 1000)
+        wave = np.sin(2 * np.pi * frequency * np.linspace(0, duration / 1000, samples))
+        wave = (wave * 32767).astype(np.int16)
+
+        # Convert to stereo
+        stereo_wave = np.column_stack((wave, wave))
+
+        sound = pygame.sndarray.make_sound(stereo_wave)
+        sound.play()
+        time.sleep(duration / 1000)
+    except Exception as e:
+        print(f"Sound error: {e}")
+
+
+def log_alert(alert_message, object_counts, image=None):
+    """
+    Log alert to file and global list
+    """
+    global alert_log
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    alert_entry = {
+        'timestamp': timestamp,
+        'message': alert_message,
+        'object_counts': object_counts
+    }
+
+    # Add to global log
+    alert_log.insert(0, alert_entry)
+
+    # Keep only last 50 alerts
+    if len(alert_log) > 50:
+        alert_log = alert_log[:50]
+
+    # Save to file
+    log_file = ALERTS_DIR / f"alert_{timestamp.replace(':', '-').replace(' ', '_')}.json"
+    with open(log_file, 'w') as f:
+        json.dump(alert_entry, f, indent=2)
+
+    # Save alert image if provided
+    if image is not None:
+        img_file = ALERTS_DIR / f"alert_img_{timestamp.replace(':', '-').replace(' ', '_')}.jpg"
+        cv2.imwrite(str(img_file), image)
+
+
+def check_alerts(object_counts, alert_rules):
+    """
+    Check if any alert rules are triggered
+    """
+    triggered_alerts = []
+
+    # Check person count alert
+    if alert_rules['person_count_enabled'] and 'person' in object_counts:
+        if object_counts['person'] >= alert_rules['person_threshold']:
+            triggered_alerts.append(
+                f"⚠️ {object_counts['person']} Persons detected! (Threshold: {alert_rules['person_threshold']})")
+
+    # Check car detection alert
+    if alert_rules['car_alert_enabled'] and 'car' in object_counts:
+        triggered_alerts.append(f"🚗 Car detected! (Count: {object_counts['car']})")
+
+    # Check truck detection alert
+    if alert_rules['truck_alert_enabled'] and 'truck' in object_counts:
+        triggered_alerts.append(f"🚚 Truck detected! (Count: {object_counts['truck']})")
+
+    # Check dog detection alert
+    if alert_rules['dog_alert_enabled'] and 'dog' in object_counts:
+        triggered_alerts.append(f"🐕 Dog detected! (Count: {object_counts['dog']})")
+
+    # Check cat detection alert
+    if alert_rules['cat_alert_enabled'] and 'cat' in object_counts:
+        triggered_alerts.append(f"🐈 Cat detected! (Count: {object_counts['cat']})")
+
+    # Check bicycle detection alert
+    if alert_rules['bicycle_alert_enabled'] and 'bicycle' in object_counts:
+        triggered_alerts.append(f"🚲 Bicycle detected! (Count: {object_counts['bicycle']})")
+
+    # Check total objects threshold
+    total_objects = sum(object_counts.values())
+    if alert_rules['total_objects_enabled'] and total_objects >= alert_rules['total_objects_threshold']:
+        triggered_alerts.append(
+            f"📊 {total_objects} Total objects detected! (Threshold: {alert_rules['total_objects_threshold']})")
+
+    return triggered_alerts
+
+
+def get_alert_log_display():
+    """
+    Get formatted alert log for display
+    """
+    if not alert_log:
+        return "### 📂 No Alerts Yet\n\nAlerts will appear here when triggered!"
+
+    display = "# 🚨 Alert Log (Last 20)\n\n"
+
+    for idx, alert in enumerate(alert_log[:20]):
+        display += f"## {idx + 1}. {alert['timestamp']}\n"
+        display += f"**{alert['message']}**\n\n"
+
+        if alert['object_counts']:
+            display += "**Objects detected:**\n"
+            for obj, count in alert['object_counts'].items():
+                display += f"- {obj.capitalize()}: {count}\n"
+
+        display += "\n---\n\n"
+
+    return display
+
+
+def clear_alert_log():
+    """
+    Clear all alerts
+    """
+    global alert_log
+    alert_log = []
+
+    # Clear alert files
+    for file in ALERTS_DIR.glob("*"):
+        file.unlink()
+
+    return "### ✅ Alert Log Cleared!\n\nAll alerts have been deleted."
+
+
+def export_alert_log():
+    """
+    Export alert log as JSON
+    """
+    if not alert_log:
+        return None
+
+    export_data = {
+        'export_timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'total_alerts': len(alert_log),
+        'alerts': alert_log
+    }
+
+    json_temp = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
+    json.dump(export_data, json_temp, indent=2)
+    json_temp.close()
+
+    return json_temp.name
 
 
 def save_to_history(image, object_counts, timestamp):
@@ -82,12 +238,10 @@ def save_to_history(image, object_counts, timestamp):
     Save detection to history
     """
     try:
-        # Save image
         img_filename = f"detection_{timestamp.replace(':', '-').replace(' ', '_')}.jpg"
         img_path = HISTORY_DIR / img_filename
         cv2.imwrite(str(img_path), image)
 
-        # Save metadata
         metadata = {
             'timestamp': timestamp,
             'object_counts': object_counts,
@@ -118,7 +272,7 @@ def load_history():
 
         history_text = "# 📂 Detection History\n\n"
 
-        for idx, meta_file in enumerate(history_files[:10]):  # Last 10 detections
+        for idx, meta_file in enumerate(history_files[:10]):
             with open(meta_file, 'r') as f:
                 data = json.load(f)
 
@@ -147,12 +301,17 @@ def clear_history():
         return f"### ⚠️ Error: {str(e)}"
 
 
-def detect_objects_image_filtered(image, confidence, use_custom_colors, *filters):
+def detect_objects_with_alerts(image, confidence, use_custom_colors,
+                               person_alert_enabled, person_threshold,
+                               car_alert, truck_alert, dog_alert, cat_alert, bicycle_alert,
+                               total_objects_enabled, total_threshold,
+                               sound_enabled, log_enabled,
+                               *filters):
     """
-    Detect objects with custom colors
+    Detect objects with smart alerts
     """
     if image is None:
-        return None, "⚠️ Please upload an image first!", None, None
+        return None, "⚠️ Please upload an image first!", None, None, None
 
     filter_classes = [
         'person', 'car', 'truck', 'bus', 'bicycle', 'motorcycle',
@@ -199,6 +358,39 @@ def detect_objects_image_filtered(image, confidence, use_custom_colors, *filters
             'bbox_y2': round(bbox[3], 2)
         })
 
+    # Check alerts
+    alert_rules = {
+        'person_count_enabled': person_alert_enabled,
+        'person_threshold': person_threshold,
+        'car_alert_enabled': car_alert,
+        'truck_alert_enabled': truck_alert,
+        'dog_alert_enabled': dog_alert,
+        'cat_alert_enabled': cat_alert,
+        'bicycle_alert_enabled': bicycle_alert,
+        'total_objects_enabled': total_objects_enabled,
+        'total_objects_threshold': total_threshold
+    }
+
+    triggered_alerts = check_alerts(object_counts, alert_rules)
+
+    # Handle alerts
+    alert_summary = ""
+    if triggered_alerts:
+        alert_summary = "\n\n## 🚨 ALERTS TRIGGERED!\n\n"
+
+        for alert_msg in triggered_alerts:
+            alert_summary += f"### {alert_msg}\n\n"
+
+            # Play sound
+            if sound_enabled:
+                threading.Thread(target=play_alert_sound).start()
+
+            # Log alert
+            if log_enabled:
+                log_alert(alert_msg, object_counts, annotated_image)
+
+        alert_summary += "---\n\n"
+
     total = len(detections)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -218,7 +410,11 @@ def detect_objects_image_filtered(image, confidence, use_custom_colors, *filters
 
     summary += f"**Timestamp:** {timestamp}\n"
     summary += f"**⏱️ Processing Time:** {process_time:.2f} seconds\n"
-    summary += f"**🚀 Speed:** {1 / process_time:.1f} FPS\n\n"
+    summary += f"**🚀 Speed:** {1 / process_time:.1f} FPS\n"
+
+    # Add alert summary
+    summary += alert_summary
+
     summary += f"## 🎯 Total Objects Found: **{total}**\n\n"
 
     if total > 0:
@@ -260,6 +456,7 @@ def detect_objects_image_filtered(image, confidence, use_custom_colors, *filters
             'fps': round(1 / process_time, 2),
             'total_objects': total,
             'object_summary': object_counts,
+            'alerts_triggered': triggered_alerts,
             'detections': export_data
         }
 
@@ -276,7 +473,10 @@ def detect_objects_image_filtered(image, confidence, use_custom_colors, *filters
         csv_temp.close()
         csv_file = csv_temp.name
 
-    return annotated_image, summary, json_file, csv_file
+    # Get current alert log
+    alert_log_display = get_alert_log_display()
+
+    return annotated_image, summary, alert_log_display, json_file, csv_file
 
 
 def detect_batch_images(images, confidence, use_custom_colors, progress=gr.Progress()):
@@ -296,9 +496,7 @@ def detect_batch_images(images, confidence, use_custom_colors, progress=gr.Progr
     for idx, img_file in enumerate(images):
         progress((idx + 1) / len(images), desc=f"Processing image {idx + 1}/{len(images)}")
 
-        # Load image
         image = Image.open(img_file.name)
-
         results = model.predict(source=image, conf=confidence, save=False)
 
         if use_custom_colors:
@@ -554,11 +752,12 @@ def detect_webcam(image, confidence):
 # Create Gradio interface
 with gr.Blocks(title="YOLO Object Detection Pro") as demo:
     gr.Markdown("# 🎯 YOLO Object Detection Pro")
-    gr.Markdown("### AI-powered detection with custom colors, batch processing, video analysis, and history!")
+    gr.Markdown(
+        "### AI-powered detection with custom colors, batch processing, video analysis, history, and **SMART ALERTS!** 🔔")
 
     with gr.Tabs():
-        # Image Detection Tab
-        with gr.Tab("📷 Image Detection"):
+        # Image Detection Tab WITH ALERTS
+        with gr.Tab("📷 Image Detection + Alerts"):
             with gr.Row():
                 with gr.Column():
                     image_input = gr.Image(type="pil", label="📤 Upload Image")
@@ -567,6 +766,34 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                     custom_colors_toggle = gr.Checkbox(label="🎨 Use Custom Colors", value=True,
                                                        info="Different color per object type")
 
+                    # ALERT SETTINGS
+                    with gr.Accordion("🔔 Smart Alert Settings", open=True):
+                        gr.Markdown("**Configure detection alerts:**")
+
+                        with gr.Row():
+                            person_alert_enabled = gr.Checkbox(label="Alert on Person Count", value=False)
+                            person_threshold = gr.Slider(1, 20, 3, step=1, label="Person Threshold")
+
+                        with gr.Row():
+                            total_objects_enabled = gr.Checkbox(label="Alert on Total Objects", value=False)
+                            total_threshold = gr.Slider(1, 50, 10, step=1, label="Total Objects Threshold")
+
+                        gr.Markdown("**Specific Object Alerts:**")
+                        with gr.Row():
+                            car_alert = gr.Checkbox(label="🚗 Alert on Car", value=False)
+                            truck_alert = gr.Checkbox(label="🚚 Alert on Truck", value=False)
+                            bicycle_alert = gr.Checkbox(label="🚲 Alert on Bicycle", value=False)
+
+                        with gr.Row():
+                            dog_alert = gr.Checkbox(label="🐕 Alert on Dog", value=False)
+                            cat_alert = gr.Checkbox(label="🐈 Alert on Cat", value=False)
+
+                        gr.Markdown("**Notification Methods:**")
+                        with gr.Row():
+                            sound_enabled = gr.Checkbox(label="🔊 Sound Alert", value=True)
+                            log_enabled = gr.Checkbox(label="📝 Log Alert", value=True)
+
+                    # Object filter checkboxes
                     with gr.Accordion("🎯 Filter Objects (Optional)", open=False):
                         gr.Markdown("**Select specific objects:**")
 
@@ -585,7 +812,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                         filter_phone = gr.Checkbox(label="📱 Phone", value=False)
                         filter_chair = gr.Checkbox(label="🪑 Chair", value=False)
 
-                    image_btn = gr.Button("🔍 Detect Objects", variant="primary", size="lg")
+                    image_btn = gr.Button("🔍 Detect with Alerts", variant="primary", size="lg")
 
                     gr.Examples(
                         examples=[
@@ -600,20 +827,27 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                     image_output = gr.Image(type="numpy", label="✨ Detection Results")
                     image_text = gr.Markdown()
 
+                    # Alert Log Display
+                    alert_log_display = gr.Markdown("### 📂 Alert Log\n\nAlerts will appear here!")
+
                     with gr.Row():
                         json_download = gr.File(label="📄 JSON")
                         csv_download = gr.File(label="📊 CSV")
 
             image_btn.click(
-                fn=detect_objects_image_filtered,
+                fn=detect_objects_with_alerts,
                 inputs=[
                     image_input, image_confidence, custom_colors_toggle,
+                    person_alert_enabled, person_threshold,
+                    car_alert, truck_alert, dog_alert, cat_alert, bicycle_alert,
+                    total_objects_enabled, total_threshold,
+                    sound_enabled, log_enabled,
                     filter_person, filter_car, filter_truck, filter_bus,
                     filter_bicycle, filter_motorcycle, filter_dog, filter_cat,
                     filter_bird, filter_bottle, filter_cup, filter_laptop,
                     filter_phone, filter_chair
                 ],
-                outputs=[image_output, image_text, json_download, csv_download]
+                outputs=[image_output, image_text, alert_log_display, json_download, csv_download]
             )
 
         # Batch Processing Tab
@@ -697,8 +931,25 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                 stream_every=0.1
             )
 
+        # Alert Log Tab
+        with gr.Tab("🚨 Alert Log"):
+            gr.Markdown("### 🚨 Alert History & Management")
+            gr.Markdown("View and manage all triggered alerts!")
+
+            with gr.Row():
+                alert_refresh_btn = gr.Button("🔄 Refresh Log", variant="primary")
+                alert_clear_btn = gr.Button("🗑️ Clear All Alerts", variant="stop")
+                alert_export_btn = gr.Button("📥 Export Log", variant="secondary")
+
+            alert_history_display = gr.Markdown("Click 'Refresh Log' to view alerts!")
+            alert_export_file = gr.File(label="📄 Download Alert Log")
+
+            alert_refresh_btn.click(fn=get_alert_log_display, outputs=alert_history_display)
+            alert_clear_btn.click(fn=clear_alert_log, outputs=alert_history_display)
+            alert_export_btn.click(fn=export_alert_log, outputs=alert_export_file)
+
         # History Tab
-        with gr.Tab("📂 History"):
+        with gr.Tab("📂 Detection History"):
             gr.Markdown("### 📂 Detection History")
             gr.Markdown("View all your past detections with timestamps and object counts!")
 
@@ -713,7 +964,8 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
 
     gr.Markdown("---")
     gr.Markdown("Built by **Samith Shivakumar** | Powered by YOLOv11 🚀")
-    gr.Markdown("⭐ **Features:** 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History")
+    gr.Markdown(
+        "⭐ **Features:** 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts**")
 
 if __name__ == "__main__":
     demo.launch()
