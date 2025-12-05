@@ -11,10 +11,19 @@ import time
 import zipfile
 from pathlib import Path
 import threading
-import pygame  # For sound alerts
 
-# Load YOLO model
-model = YOLO("yolo11n.pt")
+try:
+    import pygame
+
+    pygame.mixer.init()
+    SOUND_AVAILABLE = True
+except:
+    SOUND_AVAILABLE = False
+    print("⚠️ Sound not available on this system (disabled for cloud deployment)")
+
+# Initialize with default model
+current_model = YOLO("yolo11n.pt")
+model_cache = {"yolo11n.pt": current_model}
 
 # Create history directory
 HISTORY_DIR = Path("detection_history")
@@ -24,11 +33,26 @@ HISTORY_DIR.mkdir(exist_ok=True)
 ALERTS_DIR = Path("alert_logs")
 ALERTS_DIR.mkdir(exist_ok=True)
 
-# Initialize pygame for sound
-pygame.mixer.init()
-
 # Global alert log
 alert_log = []
+
+# Available models
+AVAILABLE_MODELS = ["yolo11n.pt", "yolo11s.pt", "yolo11m.pt", "yolo11l.pt", "yolo11x.pt"]
+
+
+def load_model(model_name):
+    """
+    Load or retrieve cached YOLO model
+    """
+    global current_model, model_cache
+
+    if model_name not in model_cache:
+        print(f"📥 Loading {model_name}...")
+        model_cache[model_name] = YOLO(model_name)
+        print(f"✅ {model_name} loaded successfully!")
+
+    current_model = model_cache[model_name]
+    return current_model
 
 
 def draw_custom_boxes(image, results, confidence):
@@ -80,27 +104,28 @@ def draw_custom_boxes(image, results, confidence):
 
 def play_alert_sound():
     """
-    Play alert sound (beep)
+    Play alert sound (beep) - HuggingFace compatible
     """
+    if not SOUND_AVAILABLE:
+        print("🔇 Sound disabled (cloud deployment)")
+        return
+
     try:
-        # Create a simple beep sound
         frequency = 1000  # Hz
         duration = 500  # milliseconds
 
-        # Generate beep (simple sine wave)
         sample_rate = 22050
         samples = int(sample_rate * duration / 1000)
         wave = np.sin(2 * np.pi * frequency * np.linspace(0, duration / 1000, samples))
         wave = (wave * 32767).astype(np.int16)
 
-        # Convert to stereo
         stereo_wave = np.column_stack((wave, wave))
 
         sound = pygame.sndarray.make_sound(stereo_wave)
         sound.play()
         time.sleep(duration / 1000)
     except Exception as e:
-        print(f"Sound error: {e}")
+        print(f"🔇 Sound error (expected on cloud): {e}")
 
 
 def log_alert(alert_message, object_counts, image=None):
@@ -117,19 +142,15 @@ def log_alert(alert_message, object_counts, image=None):
         'object_counts': object_counts
     }
 
-    # Add to global log
     alert_log.insert(0, alert_entry)
 
-    # Keep only last 50 alerts
     if len(alert_log) > 50:
         alert_log = alert_log[:50]
 
-    # Save to file
     log_file = ALERTS_DIR / f"alert_{timestamp.replace(':', '-').replace(' ', '_')}.json"
     with open(log_file, 'w') as f:
         json.dump(alert_entry, f, indent=2)
 
-    # Save alert image if provided
     if image is not None:
         img_file = ALERTS_DIR / f"alert_img_{timestamp.replace(':', '-').replace(' ', '_')}.jpg"
         cv2.imwrite(str(img_file), image)
@@ -141,33 +162,26 @@ def check_alerts(object_counts, alert_rules):
     """
     triggered_alerts = []
 
-    # Check person count alert
     if alert_rules['person_count_enabled'] and 'person' in object_counts:
         if object_counts['person'] >= alert_rules['person_threshold']:
             triggered_alerts.append(
                 f"⚠️ {object_counts['person']} Persons detected! (Threshold: {alert_rules['person_threshold']})")
 
-    # Check car detection alert
     if alert_rules['car_alert_enabled'] and 'car' in object_counts:
         triggered_alerts.append(f"🚗 Car detected! (Count: {object_counts['car']})")
 
-    # Check truck detection alert
     if alert_rules['truck_alert_enabled'] and 'truck' in object_counts:
         triggered_alerts.append(f"🚚 Truck detected! (Count: {object_counts['truck']})")
 
-    # Check dog detection alert
     if alert_rules['dog_alert_enabled'] and 'dog' in object_counts:
         triggered_alerts.append(f"🐕 Dog detected! (Count: {object_counts['dog']})")
 
-    # Check cat detection alert
     if alert_rules['cat_alert_enabled'] and 'cat' in object_counts:
         triggered_alerts.append(f"🐈 Cat detected! (Count: {object_counts['cat']})")
 
-    # Check bicycle detection alert
     if alert_rules['bicycle_alert_enabled'] and 'bicycle' in object_counts:
         triggered_alerts.append(f"🚲 Bicycle detected! (Count: {object_counts['bicycle']})")
 
-    # Check total objects threshold
     total_objects = sum(object_counts.values())
     if alert_rules['total_objects_enabled'] and total_objects >= alert_rules['total_objects_threshold']:
         triggered_alerts.append(
@@ -206,7 +220,6 @@ def clear_alert_log():
     global alert_log
     alert_log = []
 
-    # Clear alert files
     for file in ALERTS_DIR.glob("*"):
         file.unlink()
 
@@ -233,9 +246,9 @@ def export_alert_log():
     return json_temp.name
 
 
-def save_to_history(image, object_counts, timestamp):
+def save_to_history(image, object_counts, timestamp, model_name):
     """
-    Save detection to history
+    Save detection to history with model info
     """
     try:
         img_filename = f"detection_{timestamp.replace(':', '-').replace(' ', '_')}.jpg"
@@ -244,6 +257,7 @@ def save_to_history(image, object_counts, timestamp):
 
         metadata = {
             'timestamp': timestamp,
+            'model': model_name,
             'object_counts': object_counts,
             'total_objects': sum(object_counts.values()),
             'image_path': str(img_path)
@@ -277,6 +291,7 @@ def load_history():
                 data = json.load(f)
 
             history_text += f"## 🕒 {data['timestamp']}\n"
+            history_text += f"**Model:** {data.get('model', 'yolo11n.pt')}\n"
             history_text += f"**Total Objects:** {data['total_objects']}\n\n"
 
             for obj, count in sorted(data['object_counts'].items(), key=lambda x: x[1], reverse=True):
@@ -306,12 +321,16 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
                                car_alert, truck_alert, dog_alert, cat_alert, bicycle_alert,
                                total_objects_enabled, total_threshold,
                                sound_enabled, log_enabled,
+                               model_name,
                                *filters):
     """
-    Detect objects with smart alerts
+    Detect objects with smart alerts and model selection
     """
     if image is None:
         return None, "⚠️ Please upload an image first!", None, None, None
+
+    # Load selected model
+    load_model(model_name)
 
     filter_classes = [
         'person', 'car', 'truck', 'bus', 'bicycle', 'motorcycle',
@@ -321,7 +340,7 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
     selected_filters = [filter_classes[i] for i, f in enumerate(filters) if f]
 
     start_time = time.time()
-    results = model.predict(source=image, conf=confidence, save=False)
+    results = current_model.predict(source=image, conf=confidence, save=False)
     process_time = time.time() - start_time
 
     if use_custom_colors:
@@ -381,11 +400,9 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
         for alert_msg in triggered_alerts:
             alert_summary += f"### {alert_msg}\n\n"
 
-            # Play sound
             if sound_enabled:
                 threading.Thread(target=play_alert_sound).start()
 
-            # Log alert
             if log_enabled:
                 log_alert(alert_msg, object_counts, annotated_image)
 
@@ -396,9 +413,10 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
 
     # Save to history
     if object_counts:
-        save_to_history(annotated_image, object_counts, timestamp)
+        save_to_history(annotated_image, object_counts, timestamp, model_name)
 
     summary = f"# 📊 Detection Results\n\n"
+    summary += f"**🤖 Model:** {model_name}\n"
 
     if use_custom_colors:
         summary += "**🎨 Custom Colors:** ON\n"
@@ -412,7 +430,6 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
     summary += f"**⏱️ Processing Time:** {process_time:.2f} seconds\n"
     summary += f"**🚀 Speed:** {1 / process_time:.1f} FPS\n"
 
-    # Add alert summary
     summary += alert_summary
 
     summary += f"## 🎯 Total Objects Found: **{total}**\n\n"
@@ -439,7 +456,7 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
         for i, det in enumerate(detections, 1):
             summary += f"{i}. {det}\n"
     else:
-        summary = "# ⚠️ No objects detected!\n\n"
+        summary = f"# ⚠️ No objects detected!\n\n**Model:** {model_name}\n\n"
         if selected_filters:
             summary += f"**Filter active:** Looking for {', '.join(selected_filters)}\n\n"
         summary += "**Try:** Lowering confidence, changing filter, or using a different image"
@@ -450,6 +467,7 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
     if export_data:
         json_output = {
             'timestamp': timestamp,
+            'model': model_name,
             'custom_colors': use_custom_colors,
             'applied_filters': selected_filters if selected_filters else 'all',
             'processing_time_seconds': round(process_time, 2),
@@ -473,18 +491,20 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
         csv_temp.close()
         csv_file = csv_temp.name
 
-    # Get current alert log
     alert_log_display = get_alert_log_display()
 
     return annotated_image, summary, alert_log_display, json_file, csv_file
 
 
-def detect_batch_images(images, confidence, use_custom_colors, progress=gr.Progress()):
+def detect_batch_images(images, confidence, use_custom_colors, model_name, progress=gr.Progress()):
     """
-    Batch process multiple images
+    Batch process multiple images with model selection
     """
     if not images or len(images) == 0:
         return None, "⚠️ Please upload at least one image!", None
+
+    # Load selected model
+    load_model(model_name)
 
     progress(0, desc="Starting batch processing...")
 
@@ -497,7 +517,7 @@ def detect_batch_images(images, confidence, use_custom_colors, progress=gr.Progr
         progress((idx + 1) / len(images), desc=f"Processing image {idx + 1}/{len(images)}")
 
         image = Image.open(img_file.name)
-        results = model.predict(source=image, conf=confidence, save=False)
+        results = current_model.predict(source=image, conf=confidence, save=False)
 
         if use_custom_colors:
             annotated = draw_custom_boxes(image, results, confidence)
@@ -530,6 +550,7 @@ def detect_batch_images(images, confidence, use_custom_colors, progress=gr.Progr
         })
 
     summary = f"# 📦 Batch Processing Complete!\n\n"
+    summary += f"**🤖 Model:** {model_name}\n"
     summary += f"**Total Images Processed:** {len(images)}\n"
     summary += f"**Total Objects Found:** {total_objects}\n\n"
     summary += f"### 📊 Combined Object Counts:\n\n"
@@ -557,12 +578,15 @@ def detect_batch_images(images, confidence, use_custom_colors, progress=gr.Progr
     return all_images[0] if all_images else None, summary, zip_temp.name
 
 
-def detect_objects_video_with_frames(video, confidence, progress=gr.Progress()):
+def detect_objects_video_with_frames(video, confidence, model_name, progress=gr.Progress()):
     """
-    Detect objects in video with frame extraction
+    Detect objects in video with frame extraction and model selection
     """
     if video is None:
         return None, "⚠️ Please upload a video first!", None, None, None
+
+    # Load selected model
+    load_model(model_name)
 
     start_time = time.time()
     progress(0, desc="Starting video processing...")
@@ -593,7 +617,7 @@ def detect_objects_video_with_frames(video, confidence, progress=gr.Progress()):
         frame_count += 1
         progress(frame_count / total_frames, desc=f"Processing frame {frame_count}/{total_frames}")
 
-        results = model.predict(source=frame, conf=confidence, save=False, verbose=False)
+        results = current_model.predict(source=frame, conf=confidence, save=False, verbose=False)
         annotated_frame = results[0].plot()
 
         num_detections = len(results[0].boxes)
@@ -634,6 +658,7 @@ def detect_objects_video_with_frames(video, confidence, progress=gr.Progress()):
     max_detections_frame = max(frame_detection_counts, key=lambda x: x[1]) if frame_detection_counts else (0, 0)
 
     summary = f"# 🎥 Video Processing Complete!\n\n"
+    summary += f"**🤖 Model:** {model_name}\n"
     summary += f"**Timestamp:** {timestamp}\n"
     summary += f"**⏱️ Total Processing Time:** {total_time:.2f} seconds\n"
     summary += f"**🚀 Average Speed:** {avg_fps:.1f} FPS\n"
@@ -657,7 +682,7 @@ def detect_objects_video_with_frames(video, confidence, progress=gr.Progress()):
         for frame_num, num_det, _ in key_frames:
             summary += f"- Frame #{frame_num}: {num_det} objects\n"
     else:
-        summary = "### ⚠️ No objects detected!"
+        summary = f"### ⚠️ No objects detected!\n**Model:** {model_name}"
 
     progress(1.0, desc="Done!")
 
@@ -667,6 +692,7 @@ def detect_objects_video_with_frames(video, confidence, progress=gr.Progress()):
     if video_export_data:
         json_output = {
             'timestamp': timestamp,
+            'model': model_name,
             'processing_time_seconds': round(total_time, 2),
             'average_fps': round(avg_fps, 2),
             'total_frames': frame_count,
@@ -697,14 +723,17 @@ def detect_objects_video_with_frames(video, confidence, progress=gr.Progress()):
 frame_times = []
 
 
-def detect_webcam(image, confidence):
+def detect_webcam(image, confidence, model_name):
     """
-    Real-time webcam detection with FPS counter
+    Real-time webcam detection with FPS counter and model selection
     """
     global frame_times
 
     if image is None:
         return None, "### 🎯 Waiting for webcam..."
+
+    # Load selected model
+    load_model(model_name)
 
     current_time = time.time()
     frame_times.append(current_time)
@@ -712,7 +741,7 @@ def detect_webcam(image, confidence):
     frame_times = [t for t in frame_times if current_time - t < 1.0]
     fps = len(frame_times)
 
-    results = model.predict(source=image, conf=confidence, save=False, verbose=False)
+    results = current_model.predict(source=image, conf=confidence, save=False, verbose=False)
     annotated_image = results[0].plot()
 
     object_counts = {}
@@ -726,6 +755,7 @@ def detect_webcam(image, confidence):
             object_counts[class_name] = 1
 
     counter_text = "### 🔴 LIVE Detection\n\n"
+    counter_text += f"**🤖 Model:** {model_name}\n"
     counter_text += f"**🚀 FPS: {fps}** | **⏱️ Latency: {1000 / fps if fps > 0 else 0:.0f}ms**\n\n"
 
     if object_counts:
@@ -750,10 +780,30 @@ def detect_webcam(image, confidence):
 
 
 # Create Gradio interface
-with gr.Blocks(title="YOLO Object Detection Pro") as demo:
-    gr.Markdown("# 🎯 YOLO Object Detection Pro")
+with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
+    gr.Markdown("# 🚀 YOLO Object Detection Pro - Multi-Model")
     gr.Markdown(
-        "### AI-powered detection with custom colors, batch processing, video analysis, history, and **SMART ALERTS!** 🔔")
+        "### AI-powered detection with **Multi-Model Comparison**, custom colors, batch processing, video analysis, history, and **SMART ALERTS!** 🔔")
+
+    # GLOBAL MODEL SELECTOR
+    # GLOBAL MODEL SELECTOR
+    with gr.Row():
+        with gr.Column(scale=3):
+            global_model_selector = gr.Dropdown(
+                choices=AVAILABLE_MODELS,
+                value="yolo11n.pt",
+                label="🤖 Select YOLO Model (Global)",
+                info="n=fastest ⚡ | s=fast 🏃 | m=balanced ⚖️ | l=accurate 🎯 | x=most accurate 🔥"
+            )
+        with gr.Column(scale=2):
+            gr.Markdown("""
+            ### Model Guide:
+            - **n**: 2.6M params, fastest
+            - **s**: 9.4M params, very fast
+            - **m**: 20.1M params, balanced
+            - **l**: 25.3M params, accurate
+            - **x**: 56.9M params, best accuracy
+            """)
 
     with gr.Tabs():
         # Image Detection Tab WITH ALERTS
@@ -790,7 +840,8 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
 
                         gr.Markdown("**Notification Methods:**")
                         with gr.Row():
-                            sound_enabled = gr.Checkbox(label="🔊 Sound Alert", value=True)
+                            sound_enabled = gr.Checkbox(label="🔊 Sound Alert", value=True,
+                                                        info="Auto-disabled on cloud")
                             log_enabled = gr.Checkbox(label="📝 Log Alert", value=True)
 
                     # Object filter checkboxes
@@ -827,7 +878,6 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                     image_output = gr.Image(type="numpy", label="✨ Detection Results")
                     image_text = gr.Markdown()
 
-                    # Alert Log Display
                     alert_log_display = gr.Markdown("### 📂 Alert Log\n\nAlerts will appear here!")
 
                     with gr.Row():
@@ -842,6 +892,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                     car_alert, truck_alert, dog_alert, cat_alert, bicycle_alert,
                     total_objects_enabled, total_threshold,
                     sound_enabled, log_enabled,
+                    global_model_selector,
                     filter_person, filter_car, filter_truck, filter_bus,
                     filter_bicycle, filter_motorcycle, filter_dog, filter_cat,
                     filter_bird, filter_bottle, filter_cup, filter_laptop,
@@ -863,7 +914,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
                     gr.Markdown("""
                     **Batch Processing:**
                     - Upload multiple images at once
-                    - All images processed automatically
+                    - Compare models on same images
                     - Download zip with all results
                     """)
 
@@ -874,7 +925,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
 
             batch_btn.click(
                 fn=detect_batch_images,
-                inputs=[batch_images, batch_confidence, batch_colors],
+                inputs=[batch_images, batch_confidence, batch_colors, global_model_selector],
                 outputs=[batch_preview, batch_text, batch_zip]
             )
 
@@ -899,7 +950,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
 
             video_btn.click(
                 fn=detect_objects_video_with_frames,
-                inputs=[video_input, video_confidence],
+                inputs=[video_input, video_confidence, global_model_selector],
                 outputs=[video_output, video_text, key_frame_preview, video_json, video_csv]
             )
 
@@ -925,7 +976,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
 
             webcam_output.stream(
                 fn=detect_webcam,
-                inputs=[webcam_output, webcam_confidence],
+                inputs=[webcam_output, webcam_confidence, global_model_selector],
                 outputs=[webcam_output, webcam_counter],
                 time_limit=60,
                 stream_every=0.1
@@ -951,7 +1002,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
         # History Tab
         with gr.Tab("📂 Detection History"):
             gr.Markdown("### 📂 Detection History")
-            gr.Markdown("View all your past detections with timestamps and object counts!")
+            gr.Markdown("View all your past detections with timestamps, models, and object counts!")
 
             with gr.Row():
                 history_load_btn = gr.Button("🔄 Load History", variant="primary")
@@ -965,7 +1016,7 @@ with gr.Blocks(title="YOLO Object Detection Pro") as demo:
     gr.Markdown("---")
     gr.Markdown("Built by **Samith Shivakumar** | Powered by YOLOv11 🚀")
     gr.Markdown(
-        "⭐ **Features:** 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts**")
+        "⭐ **Features:** 🤖 **Multi-Model** | 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts**")
 
 if __name__ == "__main__":
     demo.launch()
