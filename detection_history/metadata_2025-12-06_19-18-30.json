@@ -1,0 +1,9 @@
+{
+  "timestamp": "2025-12-06 19:18:30",
+  "model": "yolo11n.pt",
+  "object_counts": {
+    "person": 13
+  },
+  "total_objects": 13,
+  "image_path": "detection_history/detection_2025-12-06_19-18-30.jpg"
+}

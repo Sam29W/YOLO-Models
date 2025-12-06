@@ -5,10 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4f938d78-899b-4d22-b598-46bd1ecc1eac" name="Changes" comment="image info display mode with metadata analysis">
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_11_28_25,_9_40 AM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_11_28_25__9_40AM__Changes_.xml" beforeDir="false" />
+      <change afterPath="$PROJECT_DIR$/detection_history/detection_2025-12-06_19-18-30.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/detection_history/metadata_2025-12-06_19-18-30.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app_gradio.py" beforeDir="false" afterPath="$PROJECT_DIR$/app_gradio.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
