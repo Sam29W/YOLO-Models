@@ -56,3 +56,6 @@ urllib3==2.5.0
 Werkzeug==3.1.3
 pygame==2.5.0
 reportlab
+scikit-image
+scipy
+

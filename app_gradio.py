@@ -34,6 +34,15 @@ except:
     PDF_AVAILABLE = False
     print("⚠️ ReportLab not available - PDF export disabled")
 
+try:
+    from skimage import filters
+    from scipy import ndimage
+
+    HEATMAP_AVAILABLE = True
+except:
+    HEATMAP_AVAILABLE = False
+    print("⚠️ scikit-image/scipy not available - Heatmap disabled")
+
 # Initialize with default model
 current_model = YOLO("yolo11n.pt")
 model_cache = {"yolo11n.pt": current_model}
@@ -113,6 +122,203 @@ def draw_custom_boxes(image, results, confidence):
         cv2.putText(annotated, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     return annotated
+
+
+def generate_heatmap(image, results, confidence):
+    """
+    Generate detection heatmap showing object density
+    """
+    if not HEATMAP_AVAILABLE:
+        print("⚠️ Heatmap generation not available")
+        if isinstance(image, Image.Image):
+            img_array = np.array(image)
+        else:
+            img_array = image
+        black = np.zeros_like(img_array)
+        return black, img_array
+
+    try:
+        if isinstance(image, Image.Image):
+            img_array = np.array(image)
+        else:
+            img_array = image.copy()
+
+        height, width = img_array.shape[:2]
+
+        # Create empty heatmap
+        heatmap = np.zeros((height, width), dtype=np.float32)
+
+        # Add Gaussian blobs for each detection
+        for box in results[0].boxes:
+            conf = float(box.conf[0])
+
+            if conf < confidence:
+                continue
+
+            # Get bounding box center
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+            center_x = (x1 + x2) // 2
+            center_y = (y1 + y2) // 2
+
+            # Calculate radius based on box size
+            box_width = x2 - x1
+            box_height = y2 - y1
+            radius = int(max(box_width, box_height) * 0.8)
+
+            # Create meshgrid for Gaussian
+            y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+
+            # Gaussian formula
+            gaussian = np.exp(-(x * x + y * y) / (2.0 * (radius / 2) ** 2))
+
+            # Add to heatmap (with bounds checking)
+            y_min = max(0, center_y - radius)
+            y_max = min(height, center_y + radius + 1)
+            x_min = max(0, center_x - radius)
+            x_max = min(width, center_x + radius + 1)
+
+            g_y_min = max(0, radius - center_y)
+            g_y_max = g_y_min + (y_max - y_min)
+            g_x_min = max(0, radius - center_x)
+            g_x_max = g_x_min + (x_max - x_min)
+
+            heatmap[y_min:y_max, x_min:x_max] += gaussian[g_y_min:g_y_max, g_x_min:g_x_max] * conf
+
+        # Normalize heatmap
+        if heatmap.max() > 0:
+            heatmap = heatmap / heatmap.max()
+
+        # Apply Gaussian blur for smoother visualization
+        heatmap = filters.gaussian(heatmap, sigma=20)
+
+        # Normalize again after blur
+        if heatmap.max() > 0:
+            heatmap = heatmap / heatmap.max()
+
+        # Convert to color heatmap (blue -> green -> yellow -> red)
+        heatmap_color = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Create overlay
+        overlay = cv2.addWeighted(img_array, 0.6, heatmap_color, 0.4, 0)
+
+        return heatmap_color, overlay
+
+    except Exception as e:
+        print(f"❌ Heatmap generation error: {e}")
+        # Return black images as fallback
+        if isinstance(image, Image.Image):
+            img_array = np.array(image)
+        else:
+            img_array = image
+        black = np.zeros_like(img_array)
+        return black, img_array
+
+
+def generate_video_heatmap(video_path, confidence, model_name, progress=gr.Progress()):
+    """
+    Generate aggregate heatmap for video showing detection hotspots
+    """
+    if not HEATMAP_AVAILABLE:
+        print("⚠️ Heatmap generation not available")
+        return None, None
+
+    try:
+        load_model(model_name)
+
+        cap = cv2.VideoCapture(video_path)
+
+        # Get video properties
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Initialize aggregate heatmap
+        aggregate_heatmap = np.zeros((height, width), dtype=np.float32)
+
+        frame_count = 0
+        sample_frame = None
+
+        # Process every Nth frame for performance
+        frame_skip = max(1, total_frames // 100)  # Process max 100 frames
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_count += 1
+
+            # Skip frames for performance
+            if frame_count % frame_skip != 0:
+                continue
+
+            progress(frame_count / total_frames, desc=f"Generating heatmap... {frame_count}/{total_frames}")
+
+            # Save one frame for display
+            if sample_frame is None:
+                sample_frame = frame.copy()
+
+            # Run detection
+            results = current_model.predict(source=frame, conf=confidence, save=False, verbose=False)
+
+            # Add detections to aggregate heatmap
+            for box in results[0].boxes:
+                conf = float(box.conf[0])
+
+                if conf < confidence:
+                    continue
+
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                center_x = (x1 + x2) // 2
+                center_y = (y1 + y2) // 2
+
+                box_width = x2 - x1
+                box_height = y2 - y1
+                radius = int(max(box_width, box_height) * 0.8)
+
+                y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+                gaussian = np.exp(-(x * x + y * y) / (2.0 * (radius / 2) ** 2))
+
+                y_min = max(0, center_y - radius)
+                y_max = min(height, center_y + radius + 1)
+                x_min = max(0, center_x - radius)
+                x_max = min(width, center_x + radius + 1)
+
+                g_y_min = max(0, radius - center_y)
+                g_y_max = g_y_min + (y_max - y_min)
+                g_x_min = max(0, radius - center_x)
+                g_x_max = g_x_min + (x_max - x_min)
+
+                aggregate_heatmap[y_min:y_max, x_min:x_max] += gaussian[g_y_min:g_y_max, g_x_min:g_x_max]
+
+        cap.release()
+
+        # Normalize
+        if aggregate_heatmap.max() > 0:
+            aggregate_heatmap = aggregate_heatmap / aggregate_heatmap.max()
+
+        # Apply Gaussian blur
+        aggregate_heatmap = filters.gaussian(aggregate_heatmap, sigma=25)
+
+        if aggregate_heatmap.max() > 0:
+            aggregate_heatmap = aggregate_heatmap / aggregate_heatmap.max()
+
+        # Convert to color
+        heatmap_color = cv2.applyColorMap((aggregate_heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Create overlay if we have a sample frame
+        if sample_frame is not None:
+            overlay = cv2.addWeighted(sample_frame, 0.6, heatmap_color, 0.4, 0)
+        else:
+            overlay = heatmap_color
+
+        progress(1.0, desc="Heatmap complete!")
+
+        return heatmap_color, overlay
+
+    except Exception as e:
+        print(f"❌ Video heatmap error: {e}")
+        return None, None
 
 
 def generate_pdf_report(annotated_image, export_data, object_counts, metadata):
@@ -529,7 +735,7 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
     Detect objects with smart alerts and model selection
     """
     if image is None:
-        return None, "⚠️ Please upload an image first!", None, None, None, None
+        return None, "⚠️ Please upload an image first!", None, None, None, None, None, None
 
     # Load selected model
     load_model(model_name)
@@ -549,6 +755,9 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
         annotated_image = draw_custom_boxes(image, results, confidence)
     else:
         annotated_image = results[0].plot()
+
+    # Generate heatmap
+    heatmap_pure, heatmap_overlay = generate_heatmap(image, results, confidence)
 
     detections = []
     object_counts = {}
@@ -710,11 +919,8 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
 
     alert_log_display = get_alert_log_display()
 
-    return annotated_image, summary, alert_log_display, json_file, csv_file, pdf_file
+    return annotated_image, summary, alert_log_display, json_file, csv_file, pdf_file, heatmap_pure, heatmap_overlay
 
-
-# [REST OF THE CODE REMAINS THE SAME UNTIL GRADIO INTERFACE]
-# ... (batch, video, webcam functions stay the same)
 
 def detect_batch_images(images, confidence, use_custom_colors, model_name, progress=gr.Progress()):
     """
@@ -1003,7 +1209,7 @@ def detect_webcam(image, confidence, model_name):
 with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
     gr.Markdown("# 🚀 YOLO Object Detection Pro - Multi-Model")
     gr.Markdown(
-        "### AI-powered detection with **Multi-Model Comparison**, custom colors, batch processing, video analysis, history, **SMART ALERTS** & **PDF Reports**! 📊🔔")
+        "### AI-powered detection with **Multi-Model Comparison**, custom colors, batch processing, video analysis, history, **SMART ALERTS**, **PDF Reports** & **🗺️ HEATMAPS**!")
 
     # GLOBAL MODEL SELECTOR
     with gr.Row():
@@ -1097,6 +1303,19 @@ with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
                     image_output = gr.Image(type="numpy", label="✨ Detection Results")
                     image_text = gr.Markdown()
 
+                    # Heatmap visualizations
+                    with gr.Accordion("🗺️ Heatmap Visualization", open=False):
+                        with gr.Row():
+                            heatmap_pure = gr.Image(type="numpy", label="🔥 Pure Heatmap")
+                            heatmap_overlay = gr.Image(type="numpy", label="🎨 Heatmap Overlay")
+                        gr.Markdown("""
+                        **Heatmap Guide:**
+                        - 🔵 Blue = Low detection density
+                        - 🟢 Green = Medium density
+                        - 🟡 Yellow = High density
+                        - 🔴 Red = Highest density (hotspots)
+                        """)
+
                     alert_log_display = gr.Markdown("### 📂 Alert Log\n\nAlerts will appear here!")
 
                     with gr.Row():
@@ -1118,7 +1337,8 @@ with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
                     filter_bird, filter_bottle, filter_cup, filter_laptop,
                     filter_phone, filter_chair
                 ],
-                outputs=[image_output, image_text, alert_log_display, json_download, csv_download, pdf_download]
+                outputs=[image_output, image_text, alert_log_display, json_download, csv_download, pdf_download,
+                         heatmap_pure, heatmap_overlay]
             )
 
         # Batch Processing Tab
@@ -1172,6 +1392,44 @@ with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
                 fn=detect_objects_video_with_frames,
                 inputs=[video_input, video_confidence, global_model_selector],
                 outputs=[video_output, video_text, key_frame_preview, video_json, video_csv]
+            )
+
+        # Video Heatmap Tab
+        with gr.Tab("🗺️ Video Heatmap"):
+            gr.Markdown("### 🔥 Generate Detection Heatmap from Video")
+            gr.Markdown("**Shows hotspots where objects are detected most frequently across all frames!**")
+
+            with gr.Row():
+                with gr.Column():
+                    heatmap_video_input = gr.Video(label="📤 Upload Video")
+                    heatmap_video_confidence = gr.Slider(0.1, 0.95, 0.5, step=0.05, label="Confidence Threshold")
+                    heatmap_video_btn = gr.Button("🗺️ Generate Heatmap", variant="primary", size="lg")
+
+                    gr.Markdown("""
+                    **Use Cases:**
+                    - 🏢 Security: Find high-traffic areas
+                    - 🚗 Traffic: Identify busy lanes
+                    - 🛒 Retail: Customer movement patterns
+                    - ⚽ Sports: Player positioning analysis
+                    """)
+
+                with gr.Column():
+                    with gr.Row():
+                        heatmap_video_pure = gr.Image(type="numpy", label="🔥 Pure Heatmap")
+                        heatmap_video_overlay = gr.Image(type="numpy", label="🎨 Overlay")
+
+                    gr.Markdown("""
+                    **Legend:**
+                    - 🔵 **Blue**: Low activity
+                    - 🟢 **Green**: Moderate activity
+                    - 🟡 **Yellow**: High activity
+                    - 🔴 **Red**: Hotspot (highest activity)
+                    """)
+
+            heatmap_video_btn.click(
+                fn=generate_video_heatmap,
+                inputs=[heatmap_video_input, heatmap_video_confidence, global_model_selector],
+                outputs=[heatmap_video_pure, heatmap_video_overlay]
             )
 
         # Webcam Tab
@@ -1236,7 +1494,7 @@ with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
     gr.Markdown("---")
     gr.Markdown("Built by **Samith Shivakumar** | Powered by YOLOv11 🚀")
     gr.Markdown(
-        "⭐ **Features:** 🤖 **Multi-Model** | 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts** | 📋 **PDF Reports**")
+        "⭐ **Features:** 🤖 **Multi-Model** | 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts** | 📋 **PDF Reports** | 🗺️ **Heatmaps**")
 
 if __name__ == "__main__":
     demo.launch()
