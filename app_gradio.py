@@ -43,6 +43,14 @@ except:
     HEATMAP_AVAILABLE = False
     print("⚠️ scikit-image/scipy not available - Heatmap disabled")
 
+try:
+    import qrcode
+
+    QR_AVAILABLE = True
+except:
+    QR_AVAILABLE = False
+    print("⚠️ QR code generation not available")
+
 # Initialize with default model
 current_model = YOLO("yolo11n.pt")
 model_cache = {"yolo11n.pt": current_model}
@@ -319,6 +327,138 @@ def generate_video_heatmap(video_path, confidence, model_name, progress=gr.Progr
     except Exception as e:
         print(f"❌ Video heatmap error: {e}")
         return None, None
+
+
+def generate_qr_code(url):
+    """
+    Generate QR code for easy mobile access
+    """
+    if not QR_AVAILABLE:
+        return None
+
+    try:
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(url)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        # Convert to numpy array for Gradio
+        img_array = np.array(img.convert('RGB'))
+
+        return img_array
+    except Exception as e:
+        print(f"❌ QR generation error: {e}")
+        return None
+
+
+def create_mobile_snapshot(image, results, confidence):
+    """
+    Create mobile-optimized snapshot with larger text and icons
+    """
+    if isinstance(image, Image.Image):
+        img_array = np.array(image)
+    else:
+        img_array = image.copy()
+
+    height, width = img_array.shape[:2]
+
+    # Create copy for annotation
+    annotated = img_array.copy()
+
+    # Count objects
+    object_counts = {}
+    for box in results[0].boxes:
+        class_id = int(box.cls[0])
+        class_name = results[0].names[class_id]
+        conf = float(box.conf[0])
+
+        if conf < confidence:
+            continue
+
+        if class_name in object_counts:
+            object_counts[class_name] += 1
+        else:
+            object_counts[class_name] = 1
+
+        # Draw boxes with THICKER lines for mobile
+        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+
+        # Mobile-friendly colors
+        color = (0, 255, 0)  # Green for visibility
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 5)  # Thicker lines
+
+        # Larger text for mobile
+        label = f"{class_name}"
+        font_scale = 1.5  # Bigger text
+        thickness = 3
+
+        (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+        cv2.rectangle(annotated, (x1, y1 - label_h - 20), (x1 + label_w + 10, y1), color, -1)
+        cv2.putText(annotated, label, (x1 + 5, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
+
+    # Add mobile-friendly info overlay
+    overlay = annotated.copy()
+    total_objects = sum(object_counts.values())
+
+    # Info box at top
+    info_text = f"Objects: {total_objects}"
+    cv2.rectangle(overlay, (10, 10), (400, 100), (0, 0, 0), -1)
+    cv2.putText(overlay, info_text, (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+
+    # Blend overlay
+    annotated = cv2.addWeighted(annotated, 0.85, overlay, 0.15, 0)
+
+    return annotated, object_counts
+
+
+def detect_mobile_camera(image, confidence, model_name):
+    """
+    Mobile-optimized detection with larger UI elements
+    """
+    if image is None:
+        return None, "### 📱 Tap to capture photo!", None
+
+    load_model(model_name)
+
+    start_time = time.time()
+    results = current_model.predict(source=image, conf=confidence, save=False, verbose=False)
+    process_time = time.time() - start_time
+
+    # Create mobile-optimized output
+    annotated, object_counts = create_mobile_snapshot(image, results, confidence)
+
+    # Generate summary
+    total = sum(object_counts.values())
+    summary = f"# 📱 Mobile Detection\n\n"
+    summary += f"**🎯 Found: {total} objects**\n"
+    summary += f"**⚡ Speed: {process_time:.2f}s**\n\n"
+
+    if object_counts:
+        summary += "### Objects:\n"
+        emoji_map = {
+            'person': '👤', 'car': '🚗', 'truck': '🚚', 'bus': '🚌',
+            'dog': '🐕', 'cat': '🐈', 'bicycle': '🚲', 'phone': '📱'
+        }
+
+        for obj, count in sorted(object_counts.items(), key=lambda x: x[1], reverse=True):
+            emoji = emoji_map.get(obj, '📦')
+            summary += f"- {emoji} **{obj.capitalize()}: {count}**\n"
+
+    # Save for download
+    temp_file = None
+    if total > 0:
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+        cv2.imwrite(temp.name, annotated)
+        temp.close()
+        temp_file = temp.name
+
+    return annotated, summary, temp_file
 
 
 def generate_pdf_report(annotated_image, export_data, object_counts, metadata):
@@ -1206,10 +1346,10 @@ def detect_webcam(image, confidence, model_name):
 
 
 # Create Gradio interface
-with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
-    gr.Markdown("# 🚀 YOLO Object Detection Pro - Multi-Model")
+with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model + Mobile") as demo:
+    gr.Markdown("# 🚀 YOLO Object Detection Pro - Multi-Model + Mobile")
     gr.Markdown(
-        "### AI-powered detection with **Multi-Model Comparison**, custom colors, batch processing, video analysis, history, **SMART ALERTS**, **PDF Reports** & **🗺️ HEATMAPS**!")
+        "### AI-powered detection with **Multi-Model**, **Mobile Camera**, **QR Sharing**, custom colors, batch processing, video analysis, history, **SMART ALERTS**, **PDF Reports** & **🗺️ HEATMAPS**!")
 
     # GLOBAL MODEL SELECTOR
     with gr.Row():
@@ -1339,6 +1479,105 @@ with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
                 ],
                 outputs=[image_output, image_text, alert_log_display, json_download, csv_download, pdf_download,
                          heatmap_pure, heatmap_overlay]
+            )
+
+        # Mobile Camera Tab 📱
+        with gr.Tab("📱 Mobile Camera"):
+            gr.Markdown("# 📱 Mobile-Optimized Detection")
+            gr.Markdown("### 🎯 Perfect for smartphones! Larger buttons, touch-friendly interface")
+
+            with gr.Row():
+                with gr.Column(scale=1):
+                    mobile_confidence = gr.Slider(0.1, 0.95, 0.5, step=0.05, label="📊 Confidence")
+
+                    gr.Markdown("""
+                    ### 📸 How to Use:
+                    1. 📷 **Tap camera button** below
+                    2. 🎯 **Take photo** or choose from gallery
+                    3. ⚡ **Instant detection** results!
+                    4. 💾 **Download** annotated image
+                    """)
+
+                    gr.Markdown("""
+                    ### ✨ Mobile Features:
+                    - 📱 **Native camera access**
+                    - 👆 **Touch-optimized UI**
+                    - 🔍 **Larger detection boxes**
+                    - 📥 **Easy sharing**
+                    - ⚡ **Fast processing**
+                    """)
+
+            with gr.Row():
+                mobile_camera_input = gr.Image(
+                    sources=["upload", "webcam"],
+                    type="numpy",
+                    label="📷 Capture or Upload Photo",
+                    height=400
+                )
+
+            mobile_detect_btn = gr.Button(
+                "🔍 DETECT OBJECTS",
+                variant="primary",
+                size="lg",
+                scale=2
+            )
+
+            mobile_output = gr.Image(type="numpy", label="✨ Results", height=400)
+            mobile_summary = gr.Markdown("### 📱 Results will appear here!")
+            mobile_download = gr.File(label="💾 Download Result")
+
+            mobile_detect_btn.click(
+                fn=detect_mobile_camera,
+                inputs=[mobile_camera_input, mobile_confidence, global_model_selector],
+                outputs=[mobile_output, mobile_summary, mobile_download]
+            )
+
+            gr.Markdown("""
+            ---
+            ### 💡 Pro Tips:
+            - 📷 Use **good lighting** for best results
+            - 🎯 **Center objects** in frame
+            - 📏 Keep **optimal distance** (not too close/far)
+            - 🔄 Try different **angles** if needed
+            """)
+
+        # QR Code Sharing Tab
+        with gr.Tab("📲 Share via QR"):
+            gr.Markdown("# 📲 Share This App!")
+            gr.Markdown("### Scan QR code to open on any device")
+
+            with gr.Row():
+                with gr.Column():
+                    share_url_input = gr.Textbox(
+                        label="🔗 App URL",
+                        placeholder="Enter your HuggingFace Space URL or localhost URL",
+                        value="https://huggingface.co/spaces/Samith29/yolo-object-detection",
+                        scale=3
+                    )
+                    qr_generate_btn = gr.Button("🎨 Generate QR Code", variant="primary", size="lg")
+
+                    gr.Markdown("""
+                    ### 📱 Use Cases:
+                    - Share with team members
+                    - Easy mobile access
+                    - Demo presentations
+                    - Quick testing on multiple devices
+                    """)
+
+                with gr.Column():
+                    qr_output = gr.Image(type="numpy", label="📲 Scan Me!")
+                    gr.Markdown("""
+                    **How to use:**
+                    1. Open camera app on phone
+                    2. Point at QR code
+                    3. Tap notification to open
+                    4. Start detecting! 🚀
+                    """)
+
+            qr_generate_btn.click(
+                fn=generate_qr_code,
+                inputs=[share_url_input],
+                outputs=[qr_output]
             )
 
         # Batch Processing Tab
@@ -1494,7 +1733,7 @@ with gr.Blocks(title="YOLO Object Detection Pro - Multi-Model") as demo:
     gr.Markdown("---")
     gr.Markdown("Built by **Samith Shivakumar** | Powered by YOLOv11 🚀")
     gr.Markdown(
-        "⭐ **Features:** 🤖 **Multi-Model** | 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts** | 📋 **PDF Reports** | 🗺️ **Heatmaps**")
+        "⭐ **Features:** 🤖 **Multi-Model** | 🎨 Custom Colors | 📦 Batch | 🎬 Video Analysis | 📸 Webcam | 📂 History | 🔔 **Smart Alerts** | 📋 **PDF Reports** | 🗺️ **Heatmaps** | 📱 **Mobile-Ready** | 📲 **QR Sharing**")
 
 if __name__ == "__main__":
     demo.launch()

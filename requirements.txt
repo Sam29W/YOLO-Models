@@ -58,4 +58,5 @@ pygame==2.5.0
 reportlab
 scikit-image
 scipy
+qrcode[pil]
 
