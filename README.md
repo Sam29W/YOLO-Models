@@ -106,5 +106,7 @@ Select mode (1-5):
  -   now you can preview your images and it shows detection time and number of objects
 
 -# Update dec 5 
-  -   now you can choose between models 
+  -   now you can choose between models
+
+# it's optimised for mobile phones now (dec 8)
 
