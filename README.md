@@ -109,4 +109,4 @@ Select mode (1-5):
   -   now you can choose between models
 
 # it's optimised for mobile phones now (dec 8)
-
+# The AI analyser works better now 
