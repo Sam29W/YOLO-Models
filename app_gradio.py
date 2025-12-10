@@ -385,7 +385,8 @@ def analyze_behavior_in_video(video_path, confidence, model_name, loitering_thre
                 break
 
             frame_count += 1
-            progress(frame_count / total_frames, desc=f"🧠 Analyzing... {frame_count}/{total_frames}")
+            if frame_count % 10 == 0:
+                progress(frame_count / total_frames, desc=f"🧠 Analyzing... {frame_count}/{total_frames}")
 
             results = current_model.track(source=frame, conf=confidence, persist=True, verbose=False)
             annotated_frame = frame.copy()
@@ -395,7 +396,7 @@ def analyze_behavior_in_video(video_path, confidence, model_name, loitering_thre
 
             active_states = {'🧍 IDLE': 0, '🚶 WALKING': 0, '🏃 RUNNING': 0}
 
-            if results[0].boxes.id is not None:
+            if results[0].boxes is not None and len(results[0].boxes) > 0 and results[0].boxes.id is not None:
                 boxes = results[0].boxes.xyxy.cpu().numpy()
                 track_ids = results[0].boxes.id.cpu().numpy().astype(int)
                 classes = results[0].boxes.cls.cpu().numpy().astype(int)
@@ -504,7 +505,7 @@ def analyze_behavior_in_video(video_path, confidence, model_name, loitering_thre
             if len(behavior_tracker.behavioral_alerts) > 10:
                 summary += f"\n*...and {len(behavior_tracker.behavioral_alerts) - 10} more*\n"
         else:
-            summary += "*No alerts!* ✅\n"
+            summary += "*No behavioral alerts detected!* ✅\n"
 
         heatmap_output = None
         if HEATMAP_AVAILABLE and dwell_heatmap.max() > 0:
@@ -515,11 +516,29 @@ def analyze_behavior_in_video(video_path, confidence, model_name, loitering_thre
             cv2.imwrite(heatmap_temp.name, heatmap_color)
             heatmap_output = heatmap_temp.name
 
+        # 🔧 FIXED JSON EXPORT - Convert all numpy types
         behavior_json = {
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'model': model_name,
-            'statistics': stats,
-            'alerts': behavior_tracker.behavioral_alerts
+            'total_frames': int(frame_count),
+            'fps': int(fps),
+            'statistics': {
+                'total_tracks': int(stats['total_tracks']),
+                'active_tracks': int(stats['active_tracks']),
+                'states': {str(k): int(v) for k, v in stats['states'].items()},
+                'total_alerts': int(stats['total_alerts']),
+                'loitering_events': int(stats['loitering_events']),
+                'running_events': int(stats['running_events'])
+            },
+            'alerts': [
+                {
+                    'frame': int(alert['frame']),
+                    'track_id': int(alert['track_id']),
+                    'type': str(alert['type']),
+                    'message': str(alert['message'])
+                }
+                for alert in behavior_tracker.behavioral_alerts
+            ]
         }
 
         json_temp = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
