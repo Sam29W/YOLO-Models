@@ -111,3 +111,4 @@ Select mode (1-5):
 # it's optimised for mobile phones now (dec 8)
 # The AI analyser works better now 
 # It's compactible with PC's and Mobiles now 
+# It's has enhanced detection now 
