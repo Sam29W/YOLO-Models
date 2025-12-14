@@ -104,6 +104,7 @@ Select mode (1-5):
 
 -# update 30
  -   now you can preview your images and it shows detection time and number of objects
+ - it's fully compactible with phones now 
 
 -# Update dec 5 
   -   now you can choose between models
