@@ -113,3 +113,4 @@ Select mode (1-5):
 # The AI analyser works better now 
 # It's compactible with PC's and Mobiles now 
 # It's has enhanced detection now 
+# New updates are added
