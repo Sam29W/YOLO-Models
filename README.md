@@ -40,7 +40,7 @@ Just replace `"your_image.jpg"` with any image you want to test!
 
 ## How I Built This .
 
-I used YOLOv11, which is one of the newest and fastest object detection models out there. The "nano" version (yolo11n) is lightweight and perfect for learning. It's pre-trained, so I didn't have to train it myself - it already knows how to detect 80 different types of objects! ...
+I used YOLOv11, which is one of the newest and fastest object detection models out there. The "nano" version (yolo11n) is lightweight and perfect for learning. It's pre-trained, so I didn't have to train it myself - it already knows how to detect 80 different types of objects! ....
 
 ## What I Learned
 
