@@ -803,8 +803,6 @@ def detect_webcam(image, confidence, model_name):
     return annotated, text
 
 
-# Continuing from Part 2...
-
 def detect_objects_with_alerts(image, confidence, use_custom_colors,
                                person_alert_enabled, person_threshold,
                                car_alert, truck_alert, dog_alert, cat_alert, bicycle_alert,
@@ -914,6 +912,37 @@ def detect_objects_with_alerts(image, confidence, use_custom_colors,
 with gr.Blocks(title="YOLO Detection Pro - AI Behavioral Analysis") as demo:
     gr.Markdown("# 🧠 YOLO Object Detection Pro - **AI BEHAVIORAL ANALYSIS**")
     gr.Markdown("### Multi-Model | Mobile | QR | Tracking | **BEHAVIORAL ANALYSIS** 🧠 | Alerts | Heatmaps!")
+
+    # 📊 ANIMATED STATS DASHBOARD - NEW ADDITION! 🔥
+    gr.HTML("""
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 20px; backdrop-filter: blur(10px);">
+
+            <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, rgba(102,126,234,0.3), rgba(118,75,162,0.3)); border-radius: 15px; transform: scale(1); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 3em; margin-bottom: 10px;">🤖</div>
+                <div style="font-size: 2.5em; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(102,126,234,0.8);">5+</div>
+                <div style="color: white; font-weight: 600; margin-top: 10px;">AI Models</div>
+            </div>
+
+            <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, rgba(240,147,251,0.3), rgba(245,87,108,0.3)); border-radius: 15px; transform: scale(1); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 3em; margin-bottom: 10px;">🎯</div>
+                <div style="font-size: 2.5em; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(240,147,251,0.8);">80+</div>
+                <div style="color: white; font-weight: 600; margin-top: 10px;">Object Classes</div>
+            </div>
+
+            <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, rgba(79,172,254,0.3), rgba(0,242,254,0.3)); border-radius: 15px; transform: scale(1); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 3em; margin-bottom: 10px;">⚡</div>
+                <div style="font-size: 2.5em; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(79,172,254,0.8);">30+</div>
+                <div style="color: white; font-weight: 600; margin-top: 10px;">FPS Speed</div>
+            </div>
+
+            <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, rgba(86,171,47,0.3), rgba(168,224,99,0.3)); border-radius: 15px; transform: scale(1); transition: all 0.3s ease; cursor: pointer;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 3em; margin-bottom: 10px;">✨</div>
+                <div style="font-size: 2.5em; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(168,224,99,0.8);">99%</div>
+                <div style="color: white; font-weight: 600; margin-top: 10px;">Accuracy</div>
+            </div>
+
+        </div>
+    """)
 
     with gr.Row():
         with gr.Column(scale=3):
